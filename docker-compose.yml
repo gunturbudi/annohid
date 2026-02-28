@@ -4,10 +4,10 @@ services:
     container_name: django_annotation_db
     restart: unless-stopped
     environment:
-      MYSQL_ROOT_PASSWORD: root_password
-      MYSQL_DATABASE: annotation_db
-      MYSQL_USER: annotation_user
-      MYSQL_PASSWORD: annotation_pass
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root_password}
+      MYSQL_DATABASE: ${DB_NAME:-annotation_db}
+      MYSQL_USER: ${DB_USER:-annotation_user}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-annotation_pass}
     ports:
       - "3307:3306"
     volumes:
@@ -29,13 +29,17 @@ services:
       - static_files:/app/staticfiles
     ports:
       - "8810:8810"
+    env_file:
+      - .env
     environment:
-      - DEBUG=1
+      - DEBUG=${DEBUG:-true}
       - DJANGO_SETTINGS_MODULE=medical_annotation.settings
+      - DJANGO_SECRET_KEY=${DJANGO_SECRET_KEY:-change-this-in-production}
+      - ALLOWED_HOSTS=${ALLOWED_HOSTS:-localhost,127.0.0.1}
       - DB_ENGINE=mysql
-      - DB_NAME=annotation_db
-      - DB_USER=annotation_user
-      - DB_PASSWORD=annotation_pass
+      - DB_NAME=${DB_NAME:-annotation_db}
+      - DB_USER=${DB_USER:-annotation_user}
+      - DB_PASSWORD=${DB_PASSWORD:-annotation_pass}
       - DB_HOST=db
       - DB_PORT=3306
     stdin_open: true

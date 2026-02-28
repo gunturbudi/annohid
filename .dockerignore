@@ -56,6 +56,10 @@ docker-compose.yml
 *.md
 !README.md
 
+# Secrets
+.env
+.env.*
+
 # Test files
 .coverage
 htmlcov/
