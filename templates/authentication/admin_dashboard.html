@@ -1,0 +1,612 @@
+{% extends 'base.html' %}
+
+{% block title %}Admin Dashboard - AnnoHID{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h2 class="mb-0" data-intro="Welcome to your Admin Dashboard! This is your command center for managing the entire AnnoHID." data-step="1">👨‍💼 Admin Dashboard</h2>
+            <div class="btn-group" role="group">
+                <a href="{% url 'annotation:admin_statistics_dashboard' %}" class="btn btn-outline-primary">
+                    📈 Full Statistics
+                </a>
+                <a href="{% url 'annotation:admin_data_management' %}" class="btn btn-outline-success">
+                    📊 Data Management
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Enhanced Statistics Section -->
+<div class="card mb-4" data-intro="These statistics give you a real-time overview of your system - total users, active annotators, admins, and current sessions." data-step="2">
+    <div class="card-header">
+        <div class="d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">📈 System Statistics</h5>
+            <small class="text-muted">Real-time overview</small>
+        </div>
+    </div>
+    <div class="card-body">
+        <div class="row">
+            <div class="col-md-3">
+                <div class="card bg-primary text-white text-center h-100">
+                    <div class="card-body d-flex flex-column justify-content-center">
+                        <h3 class="card-title mb-1">{{ total_users }}</h3>
+                        <p class="card-text mb-0">Total Users</p>
+                        <small class="opacity-75">All registered users</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card bg-success text-white text-center h-100">
+                    <div class="card-body d-flex flex-column justify-content-center">
+                        <h3 class="card-title mb-1">{{ total_annotators }}</h3>
+                        <p class="card-text mb-0">Annotators</p>
+                        <small class="opacity-75">Active workers</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card bg-warning text-white text-center h-100">
+                    <div class="card-body d-flex flex-column justify-content-center">
+                        <h3 class="card-title mb-1">{{ total_admins }}</h3>
+                        <p class="card-text mb-0">Admins</p>
+                        <small class="opacity-75">System administrators</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card bg-info text-white text-center h-100">
+                    <div class="card-body d-flex flex-column justify-content-center">
+                        <h3 class="card-title mb-1">{{ active_sessions.count }}</h3>
+                        <p class="card-text mb-0">Active Sessions</p>
+                        <small class="opacity-75">Currently online</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Quick Actions and Recent Activity -->
+<div class="row">
+    <!-- Quick Actions -->
+    <div class="col-lg-6">
+        <div class="card h-100" data-intro="These Quick Actions are your main workflows as an admin - managing data, documents, users, and guidelines." data-step="3">
+            <div class="card-header">
+                <h5 class="card-title mb-0">⚡ Quick Actions</h5>
+            </div>
+            <div class="card-body">
+                <div class="d-grid gap-3">
+                    <a href="{% url 'annotation:admin_data_management' %}" class="btn btn-outline-primary btn-lg text-start" data-intro="Data Management is where you import medical texts and assign them to annotators." data-step="4">
+                        <div class="d-flex align-items-center">
+                            <span class="me-3 fs-4">📊</span>
+                            <div>
+                                <div class="fw-bold">Data Management</div>
+                                <small class="text-muted">Import, view, and manage documents</small>
+                            </div>
+                        </div>
+                    </a>
+                    <a href="{% url 'annotation:document_list' %}" class="btn btn-outline-success btn-lg text-start">
+                        <div class="d-flex align-items-center">
+                            <span class="me-3 fs-4">📄</span>
+                            <div>
+                                <div class="fw-bold">Document Library</div>
+                                <small class="text-muted">Browse and assign documents</small>
+                            </div>
+                        </div>
+                    </a>
+                    <a href="{% url 'authentication:user_management' %}" class="btn btn-outline-info btn-lg text-start">
+                        <div class="d-flex align-items-center">
+                            <span class="me-3 fs-4">👥</span>
+                            <div>
+                                <div class="fw-bold">User Management</div>
+                                <small class="text-muted">Create, edit, and manage system users</small>
+                            </div>
+                        </div>
+                    </a>
+                    <a href="{% url 'annotation:admin_guidelines' %}" class="btn btn-outline-warning btn-lg text-start">
+                        <div class="d-flex align-items-center">
+                            <span class="me-3 fs-4">📋</span>
+                            <div>
+                                <div class="fw-bold">Guidelines Management</div>
+                                <small class="text-muted">Upload and manage annotation guidelines</small>
+                            </div>
+                        </div>
+                    </a>
+                    <a href="{% url 'authentication:gamification_config' %}" class="btn btn-outline-secondary btn-lg text-start">
+                        <div class="d-flex align-items-center">
+                            <span class="me-3 fs-4">🏆</span>
+                            <div>
+                                <div class="fw-bold">Gamification Settings</div>
+                                <small class="text-muted">Configure points, levels, and bonuses</small>
+                            </div>
+                        </div>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Active Sessions Summary -->
+    <div class="col-lg-6">
+        <div class="card h-100" data-intro="Monitor who's currently active in the system. This helps you track annotator activity and system usage." data-step="5">
+            <div class="card-header">
+                <div class="d-flex justify-content-between align-items-center">
+                    <h5 class="card-title mb-0">🔄 Current Activity</h5>
+                    <a href="#active-sessions" onclick="toggleActiveSessions()" class="btn btn-sm btn-outline-secondary">
+                        View All
+                    </a>
+                </div>
+            </div>
+            <div class="card-body">
+                {% if active_sessions %}
+                    <div class="mb-3">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <small class="text-muted">Recent Sessions</small>
+                            <span class="badge bg-success">{{ active_sessions.count }} active</span>
+                        </div>
+                        {% for session in active_sessions|slice:":5" %}
+                        <div class="d-flex align-items-center mb-2 p-2 bg-light rounded">
+                            <span class="activity-indicator me-2"></span>
+                            <div class="flex-grow-1">
+                                <strong>{{ session.user.username }}</strong>
+                                <small class="text-muted d-block">{{ session.last_activity|timesince }} ago</small>
+                            </div>
+                            <span class="badge bg-{% if session.user.role == 'admin' %}warning{% else %}primary{% endif %}">
+                                {{ session.user.get_role_display }}
+                            </span>
+                        </div>
+                        {% endfor %}
+                        {% if active_sessions.count > 5 %}
+                        <small class="text-muted">and {{ active_sessions.count|add:"-5" }} more...</small>
+                        {% endif %}
+                    </div>
+                {% else %}
+                    <div class="text-center text-muted py-4">
+                        <div class="fs-1 mb-2">😴</div>
+                        <p>No active sessions</p>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Collapsible User Management Section -->
+<div class="row mt-4" id="user-management" style="display: none;">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <div class="d-flex justify-content-between align-items-center">
+                    <h5 class="card-title mb-0">👥 User Management</h5>
+                    <button class="btn btn-sm btn-outline-secondary" onclick="toggleUserManagement()">
+                        Hide
+                    </button>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Username</th>
+                                <th>Role</th>
+                                <th>Last Activity</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for user_item in users %}
+                            <tr>
+                                <td>
+                                    <strong>{{ user_item.username }}</strong>
+                                    {% if user_item.is_superuser %}
+                                    <span class="badge bg-danger ms-1">Super</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <span class="badge bg-{% if user_item.role == 'admin' %}warning{% else %}primary{% endif %}">
+                                        {{ user_item.get_role_display }}
+                                    </span>
+                                </td>
+                                <td>
+                                    {% if user_item.last_activity %}
+                                        {{ user_item.last_activity|timesince }} ago
+                                    {% else %}
+                                        <span class="text-muted">Never</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if user_item.is_active %}
+                                        <span class="badge bg-success">Active</span>
+                                    {% else %}
+                                        <span class="badge bg-secondary">Inactive</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <button class="btn btn-sm btn-outline-primary" onclick="viewUserDetails({{ user_item.id }})">
+                                        View
+                                    </button>
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="5" class="text-center text-muted">No users found</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Collapsible Active Sessions Details -->
+<div class="row mt-4" id="active-sessions" style="display: none;">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <div class="d-flex justify-content-between align-items-center">
+                    <h5 class="card-title mb-0">🔄 All Active Sessions</h5>
+                    <button class="btn btn-sm btn-outline-secondary" onclick="toggleActiveSessions()">
+                        Hide
+                    </button>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    {% for session in active_sessions %}
+                    <div class="col-md-6 col-lg-4 mb-3">
+                        <div class="card border">
+                            <div class="card-body">
+                                <div class="d-flex align-items-center justify-content-between">
+                                    <div>
+                                        <strong>{{ session.user.username }}</strong>
+                                        <br>
+                                        <span class="badge bg-{% if session.user.role == 'admin' %}warning{% else %}primary{% endif %}">
+                                            {{ session.user.get_role_display }}
+                                        </span>
+                                        <br>
+                                        <small class="text-muted">
+                                            Session: {{ session.session_key|slice:":8" }}...<br>
+                                            {{ session.last_activity|timesince }} ago
+                                        </small>
+                                    </div>
+                                    <span class="activity-indicator"></span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% empty %}
+                    <div class="col-12 text-center text-muted py-4">
+                        No active sessions
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Danger Zone -->
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="card border-danger">
+            <div class="card-header bg-danger text-white d-flex justify-content-between align-items-center"
+                 role="button" onclick="toggleDangerZone()" style="cursor: pointer;">
+                <h5 class="card-title mb-0">Danger Zone</h5>
+                <i class="bi bi-chevron-down" id="danger-zone-chevron"></i>
+            </div>
+            <div class="card-body" id="danger-zone-body" style="display: none;">
+                <div class="border border-danger rounded p-3">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="text-danger mb-1">Reset All Data</h6>
+                            <p class="text-muted mb-0 small">
+                                Permanently deletes all documents, annotations, tasks, results,
+                                import history, gold standards, and gamification progress.
+                                Users, entity definitions, and guidelines are preserved.
+                            </p>
+                        </div>
+                        <button class="btn btn-outline-danger flex-shrink-0 ms-3" data-bs-toggle="modal" data-bs-target="#resetAllDataModal">
+                            Reset All Data
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Reset All Data Confirmation Modal -->
+<div class="modal fade" id="resetAllDataModal" tabindex="-1" aria-labelledby="resetAllDataModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title" id="resetAllDataModalLabel">Confirm Data Reset</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-danger">
+                    <strong>This action is irreversible.</strong> All annotation data will be permanently deleted.
+                </div>
+                <p>The following will be deleted:</p>
+                <ul class="small">
+                    <li>All documents and import history</li>
+                    <li>All annotation tasks and results</li>
+                    <li>All gold standards and agreement metrics</li>
+                    <li>All cached statistics</li>
+                    <li>All gamification progress (profiles, achievements, points)</li>
+                </ul>
+                <p>The following will be preserved:</p>
+                <ul class="small text-success">
+                    <li>User accounts</li>
+                    <li>Entity definitions</li>
+                    <li>Guidelines</li>
+                    <li>Gamification configuration</li>
+                </ul>
+                <hr>
+                <label for="resetConfirmInput" class="form-label fw-bold">
+                    Type <code>RESET ALL DATA</code> to confirm:
+                </label>
+                <input type="text" class="form-control" id="resetConfirmInput" placeholder="RESET ALL DATA" autocomplete="off">
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-danger" id="confirmResetBtn" disabled onclick="executeReset()">
+                    Permanently Delete All Data
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Admin Dashboard Tour
+    function startAdminTour() {
+        introJs().setOptions({
+            steps: [{
+                intro: "👋 Welcome to your Admin Dashboard! Let me guide you through the key features that help you manage the AnnoHID effectively."
+            }, {
+                element: 'h2[data-step="1"]',
+                intro: "This is your Admin Dashboard - your central command center for managing the entire system.",
+                position: 'bottom'
+            }, {
+                element: '.card[data-step="2"]',
+                intro: "📊 System Statistics show you real-time data: total users, active annotators, admins, and current sessions. Monitor your system's health at a glance.",
+                position: 'bottom'
+            }, {
+                element: '.card[data-step="3"]',
+                intro: "⚡ Quick Actions are your main workflows. These buttons take you to the most important admin tasks.",
+                position: 'top'
+            }, {
+                element: 'a[data-step="4"]',
+                intro: "📊 Data Management is where you'll spend most of your time - importing medical texts and assigning them to annotators for processing.",
+                position: 'right'
+            }, {
+                element: '.card[data-step="5"]',
+                intro: "🔄 Current Activity shows who's online and working. This helps you monitor annotator productivity and system usage.",
+                position: 'top'
+            }, {
+                element: '#adminDropdown',
+                intro: "⚙️ The Admin dropdown in the navigation gives you quick access to statistics, data management, user management, and system tools.",
+                position: 'bottom'
+            }, {
+                intro: "🎯 That's the essentials! You're ready to start managing your annotation system. Click 'Data Management' to import your first medical texts and get started!"
+            }],
+            exitOnOverlayClick: false,
+            showProgress: true,
+            showBullets: false,
+            scrollToElement: true,
+            overlayOpacity: 0.8
+        }).start();
+
+        // Mark tour as completed
+        introJs().oncomplete(function() {
+            markTourCompleted('admin');
+        });
+
+        introJs().onexit(function() {
+            markTourCompleted('admin');
+        });
+    }
+
+    // Auto-start tour for first-time users
+    document.addEventListener('DOMContentLoaded', function() {
+        // Check if this is the user's first visit to admin dashboard
+        if (!hasTourBeenCompleted('admin')) {
+            // Show a small prompt
+            setTimeout(function() {
+                if (confirm('👋 Welcome! Would you like to take a quick tour of the Admin Dashboard to learn about the key features?')) {
+                    startAdminTour();
+                } else {
+                    markTourCompleted('admin');
+                }
+            }, 1000);
+        }
+    });
+    function viewUserDetails(userId) {
+        alert('User details feature will be implemented in future versions.');
+    }
+
+    function refreshStats() {
+        location.reload();
+    }
+
+    function toggleUserManagement() {
+        const section = document.getElementById('user-management');
+        if (section.style.display === 'none') {
+            section.style.display = 'block';
+            // Scroll to the section
+            section.scrollIntoView({ behavior: 'smooth' });
+        } else {
+            section.style.display = 'none';
+        }
+    }
+
+    function toggleActiveSessions() {
+        const section = document.getElementById('active-sessions');
+        if (section.style.display === 'none') {
+            section.style.display = 'block';
+            // Scroll to the section
+            section.scrollIntoView({ behavior: 'smooth' });
+        } else {
+            section.style.display = 'none';
+        }
+    }
+
+    // Handle URL hash navigation
+    window.addEventListener('load', function() {
+        const hash = window.location.hash;
+        if (hash === '#user-management') {
+            toggleUserManagement();
+        } else if (hash === '#active-sessions') {
+            toggleActiveSessions();
+        }
+    });
+
+    // Auto-refresh stats every 60 seconds (less frequent since stats are more prominent)
+    setInterval(function() {
+        // Only refresh if user is still on the page
+        if (document.visibilityState === 'visible') {
+            // Refresh the session counts and activity indicators
+            fetch(window.location.href)
+                .then(response => response.text())
+                .then(html => {
+                    // Extract and update statistics cards
+                    const parser = new DOMParser();
+                    const doc = parser.parseFromString(html, 'text/html');
+
+                    // Update activity indicators
+                    const indicators = document.querySelectorAll('.activity-indicator');
+                    indicators.forEach(indicator => {
+                        indicator.style.animation = 'pulse 2s infinite';
+                    });
+
+                    console.log('Dashboard refreshed');
+                })
+                .catch(error => console.log('Auto-refresh failed:', error));
+        }
+    }, 60000); // Refresh every 60 seconds
+
+    // Add smooth animations for cards
+    document.addEventListener('DOMContentLoaded', function() {
+        const cards = document.querySelectorAll('.card');
+        cards.forEach((card, index) => {
+            card.style.animationDelay = `${index * 0.1}s`;
+            card.classList.add('fade-in');
+        });
+    });
+
+    // Danger Zone
+    function toggleDangerZone() {
+        const body = document.getElementById('danger-zone-body');
+        const chevron = document.getElementById('danger-zone-chevron');
+        if (body.style.display === 'none') {
+            body.style.display = 'block';
+            chevron.classList.replace('bi-chevron-down', 'bi-chevron-up');
+        } else {
+            body.style.display = 'none';
+            chevron.classList.replace('bi-chevron-up', 'bi-chevron-down');
+        }
+    }
+
+    // Enable/disable reset button based on confirmation input
+    document.getElementById('resetConfirmInput').addEventListener('input', function() {
+        document.getElementById('confirmResetBtn').disabled = (this.value !== 'RESET ALL DATA');
+    });
+
+    // Clear confirmation input when modal is closed
+    document.getElementById('resetAllDataModal').addEventListener('hidden.bs.modal', function() {
+        document.getElementById('resetConfirmInput').value = '';
+        document.getElementById('confirmResetBtn').disabled = true;
+    });
+
+    function showToast(message, type) {
+        const container = document.getElementById('gamification-toast-container');
+        if (!container) return;
+        const colors = { success: '#198754', error: '#dc3545', warning: '#ffc107' };
+        const icons = { success: '&#10003;', error: '&#10007;', warning: '&#9888;' };
+        const id = 'toast-' + Date.now();
+        const html = '<div id="' + id + '" class="toast show mb-2" role="alert" style="min-width:340px;border-left:4px solid ' + (colors[type] || colors.success) + ';animation:slideInRight 0.3s ease-out">' +
+            '<div class="toast-header bg-dark text-white">' +
+                '<strong class="me-auto">' + (icons[type] || '') + ' ' + (type === 'success' ? 'Success' : 'Error') + '</strong>' +
+                '<button type="button" class="btn-close btn-close-white ms-2" onclick="this.closest(\'.toast\').remove()"></button>' +
+            '</div>' +
+            '<div class="toast-body">' + message + '</div>' +
+        '</div>';
+        container.insertAdjacentHTML('beforeend', html);
+        setTimeout(function() {
+            const el = document.getElementById(id);
+            if (el) { el.style.transition = 'opacity 0.5s'; el.style.opacity = '0'; setTimeout(function() { el.remove(); }, 500); }
+        }, 6000);
+    }
+
+    function executeReset() {
+        const btn = document.getElementById('confirmResetBtn');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Deleting...';
+
+        fetch("{% url 'authentication:reset_all_data' %}", {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': '{{ csrf_token }}',
+                'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: 'confirmation=RESET ALL DATA'
+        })
+        .then(response => response.json())
+        .then(data => {
+            const modal = bootstrap.Modal.getInstance(document.getElementById('resetAllDataModal'));
+            modal.hide();
+            if (data.success) {
+                showToast(data.message, 'success');
+                setTimeout(function() { location.reload(); }, 2000);
+            } else {
+                showToast(data.error, 'error');
+                btn.disabled = false;
+                btn.textContent = 'Permanently Delete All Data';
+            }
+        })
+        .catch(error => {
+            showToast('Request failed: ' + error, 'error');
+            btn.disabled = false;
+            btn.textContent = 'Permanently Delete All Data';
+        });
+    }
+</script>
+
+<style>
+.fade-in {
+    animation: fadeIn 0.5s ease-in-out forwards;
+    opacity: 0;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes pulse {
+    0% { opacity: 1; }
+    50% { opacity: 0.5; }
+    100% { opacity: 1; }
+}
+
+.btn-lg .fs-4 {
+    font-size: 1.5rem !important;
+}
+
+.card.bg-primary, .card.bg-success, .card.bg-warning, .card.bg-info {
+    border: none;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+</style>
+{% endblock %}

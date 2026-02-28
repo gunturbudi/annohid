@@ -1,0 +1,517 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Multi-LLM NER Comparison - {{ document.title }}{% endblock %}
+
+{% block extra_css %}
+<style>
+    .entity-card {
+        border-left: 4px solid;
+        margin-bottom: 1rem;
+        transition: all 0.2s;
+    }
+    .entity-card:hover {
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    }
+    .entity-card.high-consensus { border-color: #198754; }
+    .entity-card.moderate-consensus { border-color: #0dcaf0; }
+    .entity-card.low-consensus { border-color: #ffc107; }
+    .entity-card.needs-review { border-color: #dc3545; }
+
+    .model-prediction {
+        padding: 0.5rem;
+        margin: 0.25rem 0;
+        border-radius: 0.25rem;
+        background-color: #f8f9fa;
+    }
+    .model-prediction.exact-match {
+        background-color: #d1e7dd;
+        border-left: 3px solid #198754;
+    }
+    .model-prediction.partial-match {
+        background-color: #fff3cd;
+        border-left: 3px solid #ffc107;
+    }
+
+    .entity-label {
+        display: inline-block;
+        padding: 0.25rem 0.5rem;
+        border-radius: 0.25rem;
+        font-size: 0.875rem;
+        font-weight: 600;
+    }
+    .entity-label.SYMPTOM { background-color: #ffc107; color: #000; }
+    .entity-label.DISEASE { background-color: #dc3545; color: #fff; }
+    .entity-label.BODY_PART { background-color: #0dcaf0; color: #000; }
+    .entity-label.MEDICATION { background-color: #198754; color: #fff; }
+    .entity-label.PROCEDURE { background-color: #6610f2; color: #fff; }
+
+    .consensus-badge {
+        font-size: 1.1rem;
+        padding: 0.5rem 1rem;
+    }
+
+    .model-icon {
+        width: 24px;
+        height: 24px;
+        border-radius: 50%;
+        display: inline-block;
+        margin-right: 0.5rem;
+    }
+    .model-icon.gemini { background-color: #4285f4; }
+    .model-icon.gpt { background-color: #10a37f; }
+    .model-icon.claude { background-color: #8b5cf6; }
+
+    .stats-card {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border-radius: 0.5rem;
+        padding: 1.5rem;
+        margin-bottom: 1rem;
+    }
+
+    .entity-checkbox {
+        transform: scale(1.3);
+        margin-right: 0.5rem;
+    }
+
+    .highlighted-text {
+        background-color: #fff3cd;
+        padding: 0.2rem 0.4rem;
+        border-radius: 0.2rem;
+        font-weight: 600;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h2><i class="fas fa-brain"></i> Multi-LLM NER Comparison</h2>
+                    <p class="text-muted mb-0">Document: <strong>{{ document.title|default:"Untitled" }}</strong></p>
+                </div>
+                <div>
+                    <a href="{% url 'annotation:multi_llm_ner_run' document.id %}" class="btn btn-outline-primary">
+                        <i class="fas fa-redo"></i> Run Again
+                    </a>
+                    <a href="{% url 'annotation:annotator_documents' %}" class="btn btn-outline-secondary">
+                        <i class="fas fa-arrow-left"></i> Back
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Agreement Statistics -->
+    <div class="row mb-4">
+        <div class="col-md-12">
+            <div class="stats-card">
+                <h4 class="mb-3"><i class="fas fa-chart-line"></i> Agreement Statistics</h4>
+                <div class="row">
+                    <div class="col-md-3">
+                        <h5 class="mb-1">{{ agreement_stats.total_unique_entities }}</h5>
+                        <small>Total Unique Entities</small>
+                    </div>
+                    <div class="col-md-3">
+                        <h5 class="mb-1">{{ agreement_stats.unanimous_consensus }}</h5>
+                        <small>Unanimous Consensus ({{ total_models }}/{{ total_models }})</small>
+                    </div>
+                    <div class="col-md-3">
+                        <h5 class="mb-1">{{ agreement_stats.agreement_rate|floatformat:1 }}%</h5>
+                        <small>Agreement Rate</small>
+                    </div>
+                    <div class="col-md-3">
+                        <h5 class="mb-1">{{ total_models }}</h5>
+                        <small>Models Compared</small>
+                    </div>
+                </div>
+                <hr class="my-3" style="border-color: rgba(255,255,255,0.3);">
+                <div class="row">
+                    {% for result in llm_results %}
+                    <div class="col-md-4 mb-2">
+                        <div class="d-flex align-items-center">
+                            <span class="model-icon {{ result.model_used|first|lower }}"></span>
+                            <div>
+                                <strong>{{ result.model_used }}</strong><br>
+                                <small>{{ result.total_entities }} entities, {{ result.confidence_score|floatformat:2 }} avg conf</small>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Document Text -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header bg-light">
+                    <h5 class="mb-0"><i class="fas fa-file-alt"></i> Document Text</h5>
+                </div>
+                <div class="card-body">
+                    <p class="lead">{{ document.content }}</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Entity Groups -->
+    <form id="approval-form" method="post" action="{% url 'annotation:multi_llm_ner_approve' document.id %}">
+        {% csrf_token %}
+        <input type="hidden" name="approved_entities" id="approved-entities-input">
+
+        <!-- High Consensus Entities -->
+        {% if grouped_entities.high_consensus %}
+        <div class="row mb-4">
+            <div class="col-12">
+                <h4 class="mb-3">
+                    <span class="badge bg-success consensus-badge">
+                        <i class="fas fa-check-circle"></i> High Consensus ({{ grouped_entities.high_consensus|length }})
+                    </span>
+                </h4>
+                <div class="alert alert-success">
+                    <i class="fas fa-info-circle"></i> These entities have strong agreement across models. They are likely accurate.
+                </div>
+
+                {% for entity in grouped_entities.high_consensus %}
+                <div class="card entity-card high-consensus">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-start mb-3">
+                            <div class="flex-grow-1">
+                                <h5 class="card-title mb-2">
+                                    <input type="checkbox" class="entity-checkbox"
+                                           data-entity-index="{{ forloop.counter0 }}"
+                                           data-entity="{{ entity|escapejs }}"
+                                           checked>
+                                    <span class="highlighted-text">"{{ entity.text }}"</span>
+                                    <span class="entity-label {{ entity.label }}">{{ entity.label }}</span>
+                                </h5>
+                                <p class="text-muted mb-1">
+                                    <small>Offset: {{ entity.start_offset }}-{{ entity.end_offset }}</small>
+                                </p>
+                            </div>
+                            <div class="text-end">
+                                <span class="badge bg-success">
+                                    {{ entity.consensus_score }}/{{ total_models }} models
+                                </span>
+                                <br>
+                                <small class="text-muted">{{ entity.consensus_percentage|floatformat:0 }}% consensus</small>
+                                <br>
+                                <small class="text-muted">Avg conf: {{ entity.avg_confidence|floatformat:2 }}</small>
+                            </div>
+                        </div>
+
+                        <!-- Model Predictions -->
+                        <div class="model-predictions">
+                            <h6 class="mb-2"><i class="fas fa-robot"></i> Model Predictions:</h6>
+                            {% for pred in entity.model_predictions %}
+                            <div class="model-prediction {% if pred.exact_match %}exact-match{% else %}partial-match{% endif %}">
+                                <div class="d-flex justify-content-between">
+                                    <div>
+                                        <span class="model-icon {{ pred.model|first|lower }}"></span>
+                                        <strong>{{ pred.model }}</strong>
+                                        {% if pred.exact_match %}
+                                            <span class="badge bg-success ms-2">Exact Match</span>
+                                        {% else %}
+                                            <span class="badge bg-warning ms-2">Partial Match</span>
+                                        {% endif %}
+                                    </div>
+                                    <div>
+                                        <span class="badge bg-info">{{ pred.confidence|floatformat:2 }} conf</span>
+                                    </div>
+                                </div>
+                                {% if not pred.exact_match %}
+                                <small class="text-muted">
+                                    Predicted: "{{ entity.text }}" [{{ pred.predicted_span.0 }}-{{ pred.predicted_span.1 }}] as {{ pred.predicted_label }}
+                                </small>
+                                {% endif %}
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Moderate Consensus Entities -->
+        {% if grouped_entities.moderate_consensus %}
+        <div class="row mb-4">
+            <div class="col-12">
+                <h4 class="mb-3">
+                    <span class="badge bg-info consensus-badge">
+                        <i class="fas fa-info-circle"></i> Moderate Consensus ({{ grouped_entities.moderate_consensus|length }})
+                    </span>
+                </h4>
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle"></i> These entities have moderate agreement. Review individual predictions.
+                </div>
+
+                {% for entity in grouped_entities.moderate_consensus %}
+                <div class="card entity-card moderate-consensus">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-start mb-3">
+                            <div class="flex-grow-1">
+                                <h5 class="card-title mb-2">
+                                    <input type="checkbox" class="entity-checkbox"
+                                           data-entity-index="{{ forloop.counter0 }}"
+                                           data-entity="{{ entity|escapejs }}"
+                                           checked>
+                                    <span class="highlighted-text">"{{ entity.text }}"</span>
+                                    <span class="entity-label {{ entity.label }}">{{ entity.label }}</span>
+                                </h5>
+                            </div>
+                            <div class="text-end">
+                                <span class="badge bg-info">
+                                    {{ entity.consensus_score }}/{{ total_models }} models
+                                </span>
+                            </div>
+                        </div>
+
+                        <div class="model-predictions">
+                            <h6 class="mb-2"><i class="fas fa-robot"></i> Model Predictions:</h6>
+                            {% for pred in entity.model_predictions %}
+                            <div class="model-prediction {% if pred.exact_match %}exact-match{% else %}partial-match{% endif %}">
+                                <div class="d-flex justify-content-between">
+                                    <div>
+                                        <strong>{{ pred.model }}</strong>
+                                        {% if not pred.exact_match %}
+                                            <span class="badge bg-warning ms-2">{{ pred.predicted_label }}</span>
+                                        {% endif %}
+                                    </div>
+                                    <span class="badge bg-info">{{ pred.confidence|floatformat:2 }}</span>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Low Consensus / Needs Review -->
+        {% if grouped_entities.low_consensus or grouped_entities.needs_review %}
+        <div class="row mb-4">
+            <div class="col-12">
+                <h4 class="mb-3">
+                    <span class="badge bg-warning consensus-badge">
+                        <i class="fas fa-exclamation-triangle"></i> Needs Review ({{ grouped_entities.low_consensus|length|add:grouped_entities.needs_review|length }})
+                    </span>
+                </h4>
+                <div class="alert alert-warning">
+                    <i class="fas fa-exclamation-triangle"></i> These entities have low agreement or disagreements. Carefully review before approving.
+                </div>
+
+                {% for entity in grouped_entities.low_consensus %}
+                <div class="card entity-card low-consensus">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-start mb-3">
+                            <div class="flex-grow-1">
+                                <h5 class="card-title mb-2">
+                                    <input type="checkbox" class="entity-checkbox"
+                                           data-entity-index="{{ forloop.counter0 }}"
+                                           data-entity="{{ entity|escapejs }}">
+                                    <span class="highlighted-text">"{{ entity.text }}"</span>
+                                    <span class="entity-label {{ entity.label }}">{{ entity.label }}</span>
+                                </h5>
+                            </div>
+                            <div class="text-end">
+                                <span class="badge bg-warning text-dark">
+                                    {{ entity.consensus_score }}/{{ total_models }} models
+                                </span>
+                            </div>
+                        </div>
+
+                        {% if entity.has_label_disagreement %}
+                        <div class="alert alert-danger py-2 mb-2">
+                            <small><i class="fas fa-exclamation-circle"></i> Label disagreement: {{ entity.all_labels|join:", " }}</small>
+                        </div>
+                        {% endif %}
+
+                        <div class="model-predictions">
+                            <h6 class="mb-2"><i class="fas fa-robot"></i> Model Predictions:</h6>
+                            {% for pred in entity.model_predictions %}
+                            <div class="model-prediction partial-match">
+                                <div class="d-flex justify-content-between">
+                                    <div>
+                                        <strong>{{ pred.model }}</strong>
+                                        <span class="badge bg-secondary ms-2">{{ pred.predicted_label }}</span>
+                                    </div>
+                                    <span class="badge bg-info">{{ pred.confidence|floatformat:2 }}</span>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+
+                {% for entity in grouped_entities.needs_review %}
+                <div class="card entity-card needs-review">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-start mb-3">
+                            <div class="flex-grow-1">
+                                <h5 class="card-title mb-2">
+                                    <input type="checkbox" class="entity-checkbox"
+                                           data-entity-index="{{ forloop.counter0 }}"
+                                           data-entity="{{ entity|escapejs }}">
+                                    <span class="highlighted-text">"{{ entity.text }}"</span>
+                                    <span class="entity-label {{ entity.label }}">{{ entity.label }}</span>
+                                </h5>
+                            </div>
+                            <div class="text-end">
+                                <span class="badge bg-danger">
+                                    {{ entity.consensus_score }}/{{ total_models }} models
+                                </span>
+                            </div>
+                        </div>
+
+                        <div class="model-predictions">
+                            <h6 class="mb-2"><i class="fas fa-robot"></i> Model Predictions:</h6>
+                            {% for pred in entity.model_predictions %}
+                            <div class="model-prediction">
+                                <strong>{{ pred.model }}</strong>: {{ pred.predicted_label }} ({{ pred.confidence|floatformat:2 }})
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Action Buttons -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <h5 class="mb-1">Review Complete?</h5>
+                                <p class="text-muted mb-0">
+                                    <span id="selected-count">0</span> entities selected for approval
+                                </p>
+                            </div>
+                            <div>
+                                <button type="button" class="btn btn-outline-secondary" id="select-all-btn">
+                                    <i class="fas fa-check-square"></i> Select All
+                                </button>
+                                <button type="button" class="btn btn-outline-secondary" id="select-high-consensus-btn">
+                                    <i class="fas fa-check-circle"></i> Select High Consensus
+                                </button>
+                                <button type="submit" class="btn btn-success btn-lg" id="approve-btn">
+                                    <i class="fas fa-check"></i> Approve Selected Entities
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </form>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const form = document.getElementById('approval-form');
+    const checkboxes = document.querySelectorAll('.entity-checkbox');
+    const selectedCountSpan = document.getElementById('selected-count');
+    const approvedEntitiesInput = document.getElementById('approved-entities-input');
+
+    function updateSelectedCount() {
+        const count = document.querySelectorAll('.entity-checkbox:checked').length;
+        selectedCountSpan.textContent = count;
+    }
+
+    function collectApprovedEntities() {
+        const approved = [];
+        checkboxes.forEach(checkbox => {
+            if (checkbox.checked) {
+                const entityData = checkbox.getAttribute('data-entity');
+                try {
+                    const entity = JSON.parse(entityData);
+                    // Extract only needed fields for final annotation
+                    approved.push({
+                        text: entity.text,
+                        start_offset: entity.start_offset,
+                        end_offset: entity.end_offset,
+                        label: entity.label,
+                        confidence: entity.avg_confidence,
+                        source: 'multi_llm_approved',
+                        consensus_score: entity.consensus_score
+                    });
+                } catch(e) {
+                    console.error('Error parsing entity:', e);
+                }
+            }
+        });
+        return approved;
+    }
+
+    checkboxes.forEach(checkbox => {
+        checkbox.addEventListener('change', updateSelectedCount);
+    });
+
+    document.getElementById('select-all-btn').addEventListener('click', function() {
+        checkboxes.forEach(cb => cb.checked = true);
+        updateSelectedCount();
+    });
+
+    document.getElementById('select-high-consensus-btn').addEventListener('click', function() {
+        document.querySelectorAll('.high-consensus .entity-checkbox').forEach(cb => cb.checked = true);
+        updateSelectedCount();
+    });
+
+    form.addEventListener('submit', function(e) {
+        e.preventDefault();
+
+        const approved = collectApprovedEntities();
+
+        if (approved.length === 0) {
+            alert('Please select at least one entity to approve.');
+            return;
+        }
+
+        if (!confirm(`Approve ${approved.length} entities?`)) {
+            return;
+        }
+
+        approvedEntitiesInput.value = JSON.stringify(approved);
+
+        // Submit via fetch for better UX
+        const formData = new FormData(form);
+
+        fetch(form.action, {
+            method: 'POST',
+            body: formData,
+            headers: {
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert(data.message);
+                window.location.href = "{% url 'annotation:annotator_documents' %}";
+            } else {
+                alert('Error: ' + data.error);
+            }
+        })
+        .catch(error => {
+            alert('Error submitting approval: ' + error);
+        });
+    });
+
+    updateSelectedCount();
+});
+</script>
+{% endblock %}

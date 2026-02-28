@@ -1,0 +1,1250 @@
+{% extends 'base.html' %}
+
+{% block title %}Document Details - AnnoHID{% endblock %}
+
+{% block extra_css %}
+<style>
+    /* Entity highlighting styles */
+    .entity-highlight {
+        padding: 2px 4px;
+        border-radius: 3px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+    .entity-highlight:hover {
+        box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        transform: translateY(-1px);
+    }
+    .entity-SYMPTOM {
+        background-color: #fff3cd;
+        border: 1px solid #ffc107;
+        color: #856404;
+    }
+    .entity-DISEASE {
+        background-color: #f8d7da;
+        border: 1px solid #dc3545;
+        color: #721c24;
+    }
+    .entity-BODY_PART {
+        background-color: #d1ecf1;
+        border: 1px solid #17a2b8;
+        color: #0c5460;
+    }
+    .entity-MEDICATION {
+        background-color: #d4edda;
+        border: 1px solid #28a745;
+        color: #155724;
+    }
+    .entity-PROCEDURE {
+        background-color: #e2d8f3;
+        border: 1px solid #6f42c1;
+        color: #4a2875;
+    }
+    .entity-card {
+        border-left: 4px solid;
+        padding: 8px;
+        margin-bottom: 8px;
+        background-color: #f8f9fa;
+        border-radius: 4px;
+    }
+    .entity-card.SYMPTOM { border-left-color: #ffc107; }
+    .entity-card.DISEASE { border-left-color: #dc3545; }
+    .entity-card.BODY_PART { border-left-color: #17a2b8; }
+    .entity-card.MEDICATION { border-left-color: #28a745; }
+    .entity-card.PROCEDURE { border-left-color: #6f42c1; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h2>📄 Document Details</h2>
+            <div>
+                <a href="{% url 'annotation:document_list' %}" class="btn btn-outline-secondary">
+                    ← Back to Documents
+                </a>
+                <a href="{% url 'annotation:admin_data_management' %}" class="btn btn-outline-primary">
+                    📊 Data Management
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <!-- Document Information -->
+    <div class="col-lg-8">
+        <div class="card">
+            <div class="card-header">
+                <div class="d-flex justify-content-between align-items-center">
+                    <h5 class="card-title mb-0">📋 Document Information</h5>
+                    <span class="badge bg-{% if document.status == 'completed' %}success{% elif document.status == 'in_progress' %}primary{% elif document.status == 'assigned' %}info{% else %}warning{% endif %} fs-6">
+                        {{ document.get_status_display }}
+                    </span>
+                </div>
+            </div>
+            <div class="card-body">
+                <!-- Document Content -->
+                <div class="mb-4">
+                    <h6 class="text-muted">Content</h6>
+                    <div class="border rounded p-3 bg-light">
+                        <p class="mb-0" style="white-space: pre-wrap; line-height: 1.6;">{{ document.content }}</p>
+                    </div>
+                </div>
+
+                <!-- Existing NER Annotations -->
+                {% if has_ner %}
+                <div class="mb-4">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <h6 class="text-muted mb-0">🎯 NER Annotations ({{ ner_annotations.count }})</h6>
+                        <a href="{% url 'annotation:annotation_results_list' %}?document={{ document.id }}&task_type=ner" class="btn btn-sm btn-outline-secondary">
+                            View All NER Results
+                        </a>
+                    </div>
+                    {% if latest_ner %}
+                    <div class="card border-success">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-start mb-3">
+                                <div>
+                                    <span class="badge bg-success">Latest NER</span>
+                                    <span class="badge bg-info">{{ latest_ner.get_annotation_type_display }}</span>
+                                    <small class="text-muted ms-2">by {{ latest_ner.annotator.username }}</small>
+                                </div>
+                                <div class="text-end">
+                                    <small class="text-muted">{{ latest_ner.created_at|date:"M d, Y H:i" }}</small>
+                                    {% if latest_ner.model_used %}
+                                    <br><small class="text-muted">Model: {{ latest_ner.model_used }}</small>
+                                    {% endif %}
+                                </div>
+                            </div>
+
+                            {% if latest_ner.entities_json %}
+                            <div class="border rounded p-3 bg-white mb-3">
+                                <div id="existing-ner-highlighted-content" style="line-height: 2.2;"></div>
+                            </div>
+
+                            <div class="row">
+                                {% for entity_type, entities in latest_ner.get_filtered_entities_by_type.items %}
+                                <div class="col-md-6 mb-3">
+                                    <div class="entity-card {{ entity_type }}">
+                                        <h6 class="mb-2">
+                                            {% if entity_type == 'SYMPTOM' %}🤒 Symptoms
+                                            {% elif entity_type == 'DISEASE' %}🦠 Diseases
+                                            {% elif entity_type == 'BODY_PART' %}🫀 Body Parts
+                                            {% elif entity_type == 'MEDICATION' %}💊 Medications
+                                            {% elif entity_type == 'PROCEDURE' %}🏥 Procedures
+                                            {% else %}{{ entity_type }}
+                                            {% endif %}
+                                            <span class="badge bg-secondary">{{ entities|length }}</span>
+                                        </h6>
+                                        <ul class="list-unstyled mb-0">
+                                            {% for entity in entities %}
+                                            <li class="mb-1">
+                                                <strong>{{ entity.text }}</strong>
+                                                {% if entity.source %}
+                                                <small class="badge badge-sm bg-light text-dark">{{ entity.source }}</small>
+                                                {% endif %}
+                                            </li>
+                                            {% endfor %}
+                                        </ul>
+                                    </div>
+                                </div>
+                                {% endfor %}
+                            </div>
+
+                            <div class="mt-2">
+                                <small class="text-muted">
+                                    <strong>Total Entities:</strong> {{ latest_ner.total_entities }}
+                                    {% if latest_ner.processing_time %}
+                                    | <strong>Processing Time:</strong> {{ latest_ner.processing_time|floatformat:2 }}s
+                                    {% endif %}
+                                </small>
+                            </div>
+                            {% else %}
+                            <p class="text-muted mb-0">No entities extracted</p>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+                {% endif %}
+
+                <!-- Existing MCN Annotations -->
+                {% if has_mcn %}
+                <div class="mb-4">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <h6 class="text-muted mb-0">🩺 MCN Annotations ({{ mcn_annotations.count }})</h6>
+                        <a href="{% url 'annotation:annotation_results_list' %}?document={{ document.id }}&task_type=mcn" class="btn btn-sm btn-outline-secondary">
+                            View All MCN Results
+                        </a>
+                    </div>
+                    {% if latest_mcn %}
+                    <div class="card border-primary">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-start mb-3">
+                                <div>
+                                    <span class="badge bg-primary">Latest MCN</span>
+                                    <span class="badge bg-info">{{ latest_mcn.get_annotation_type_display }}</span>
+                                    <small class="text-muted ms-2">by {{ latest_mcn.annotator.username }}</small>
+                                </div>
+                                <div class="text-end">
+                                    <small class="text-muted">{{ latest_mcn.created_at|date:"M d, Y H:i" }}</small>
+                                    {% if latest_mcn.model_used %}
+                                    <br><small class="text-muted">Model: {{ latest_mcn.model_used }}</small>
+                                    {% endif %}
+                                </div>
+                            </div>
+
+                            {% if latest_mcn.entities_json %}
+                            <div class="row">
+                                {% for entity in latest_mcn.entities_json %}
+                                <div class="col-md-6 mb-2">
+                                    <div class="border rounded p-2 bg-light">
+                                        <strong>{{ entity.indonesian_term|default:entity.text }}</strong>
+                                        {% if entity.snomed_term or entity.english_term %}
+                                        <br><small class="text-muted">
+                                            → {{ entity.snomed_term|default:entity.english_term }}
+                                        </small>
+                                        {% endif %}
+                                        {% if entity.snomed_code %}
+                                        <br><small class="badge bg-info">SNOMED: {{ entity.snomed_code }}</small>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                                {% endfor %}
+                            </div>
+
+                            <div class="mt-2">
+                                <small class="text-muted">
+                                    <strong>Total Mappings:</strong> {{ latest_mcn.total_entities }}
+                                    {% if latest_mcn.processing_time %}
+                                    | <strong>Processing Time:</strong> {{ latest_mcn.processing_time|floatformat:2 }}s
+                                    {% endif %}
+                                </small>
+                            </div>
+                            {% else %}
+                            <p class="text-muted mb-0">No MCN mappings available</p>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+                {% endif %}
+
+                <!-- LangExtract Results (Hidden by default, shown after extraction) -->
+                <div id="langextract-results" style="display: none;" class="mb-4">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <h6 class="text-muted mb-0">🤖 LangExtract Results</h6>
+                        <button class="btn btn-sm btn-outline-secondary" onclick="document.getElementById('langextract-results').style.display='none'">
+                            ✕ Hide
+                        </button>
+                    </div>
+                    <div class="border rounded p-3 bg-white">
+                        <div id="highlighted-content" style="line-height: 2.2;"></div>
+                    </div>
+                    <div class="mt-3">
+                        <h6 class="text-muted">Extracted Entities</h6>
+                        <div id="entity-list" class="row"></div>
+                    </div>
+                </div>
+
+                <!-- Metadata -->
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <h6 class="text-muted">Word Count</h6>
+                            <p class="mb-0">{{ document.word_count }} words</p>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <h6 class="text-muted">Character Count</h6>
+                            <p class="mb-0">{{ document.character_count }} characters</p>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <h6 class="text-muted">Source File</h6>
+                            <p class="mb-0">
+                                {% if document.source_file %}
+                                    {{ document.source_file }}
+                                    {% if document.line_number %}
+                                        <small class="text-muted">(Line {{ document.line_number }})</small>
+                                    {% endif %}
+                                {% else %}
+                                    <span class="text-muted">Manual entry</span>
+                                {% endif %}
+                            </p>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <h6 class="text-muted">Uploaded By</h6>
+                            <p class="mb-0">{{ document.uploaded_by.username }}</p>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <h6 class="text-muted">Created</h6>
+                            <p class="mb-0">{{ document.created_at|date:"M d, Y H:i" }}</p>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <h6 class="text-muted">Last Updated</h6>
+                            <p class="mb-0">{{ document.updated_at|timesince }} ago</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Annotation Tasks -->
+        {% if document.annotation_tasks.exists %}
+        <div class="card mt-4">
+            <div class="card-header">
+                <h5 class="card-title mb-0">📝 Annotation Tasks</h5>
+            </div>
+            <div class="card-body">
+                {% for task in document.annotation_tasks.all %}
+                <div class="border rounded p-3 mb-3">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <h6 class="mb-0">
+                            <span class="badge bg-info me-2">{{ task.annotator.get_role_display }}</span>
+                            {{ task.annotator.username }}
+                        </h6>
+                        <span class="badge bg-{% if task.is_completed %}success{% elif task.is_started %}primary{% else %}warning{% endif %}">
+                            {% if task.is_completed %}Completed{% elif task.is_started %}In Progress{% else %}Not Started{% endif %}
+                        </span>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <small class="text-muted">Assigned: {{ task.assigned_at|date:"M d, Y H:i" }}</small>
+                        </div>
+                        {% if task.started_at %}
+                        <div class="col-md-6">
+                            <small class="text-muted">Started: {{ task.started_at|date:"M d, Y H:i" }}</small>
+                        </div>
+                        {% endif %}
+                        {% if task.completed_at %}
+                        <div class="col-md-6">
+                            <small class="text-muted">Completed: {{ task.completed_at|date:"M d, Y H:i" }}</small>
+                        </div>
+                        {% endif %}
+                        {% if task.actual_duration %}
+                        <div class="col-md-6">
+                            <small class="text-muted">Duration: {{ task.actual_duration }}</small>
+                        </div>
+                        {% endif %}
+                    </div>
+                    {% if task.notes %}
+                    <div class="mt-2">
+                        <small class="text-muted">Notes:</small>
+                        <div class="border rounded p-2 bg-light mt-1">
+                            <small>{{ task.notes }}</small>
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Assignment Panel -->
+    <div class="col-lg-4">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">👤 Assignment</h5>
+            </div>
+            <div class="card-body">
+                <!-- Current Assignments -->
+                <div class="mb-4">
+                    <h6 class="text-muted">Currently Assigned To</h6>
+                    {% if document.get_assignment_count > 0 %}
+                        <div class="mb-2">
+                            <span class="badge bg-primary">{{ document.get_assignment_count }} annotator{{ document.get_assignment_count|pluralize }}</span>
+                        </div>
+                        {% for annotator in document.get_assigned_annotators %}
+                        <div class="d-flex justify-content-between align-items-center border rounded p-2 mb-2">
+                            <div class="d-flex align-items-center">
+                                <span class="badge bg-info me-2">{{ annotator.get_role_display }}</span>
+                                <strong>{{ annotator.username }}</strong>
+                            </div>
+                            <button class="btn btn-outline-danger btn-sm" onclick="removeAnnotator({{ annotator.id }}, '{{ annotator.username }}')">
+                                ✕
+                            </button>
+                        </div>
+                        {% endfor %}
+                        <div class="mt-2">
+                            <button class="btn btn-outline-warning btn-sm" onclick="clearAllAnnotators()">
+                                Clear All Annotators
+                            </button>
+                        </div>
+                    {% else %}
+                        <div class="text-muted">
+                            <i class="me-1">👤</i>
+                            Unassigned
+                        </div>
+                    {% endif %}
+                </div>
+
+                <!-- Assignment Form -->
+                <div class="mb-4">
+                    <h6 class="text-muted">Add Annotator</h6>
+                    <form id="assignment-form">
+                        {% csrf_token %}
+                        <div class="mb-3">
+                            <select name="annotator_id" class="form-select" required>
+                                <option value="">Select annotator to add...</option>
+                                {% for annotator in annotators %}
+                                <option value="{{ annotator.id }}" {% if annotator.id in assigned_annotator_ids %}disabled{% endif %}>
+                                    {{ annotator.username }}
+                                    {% if annotator.id in assigned_annotator_ids %} (Already assigned){% endif %}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="d-grid">
+                            <button type="submit" class="btn btn-primary">
+                                <span class="spinner-border spinner-border-sm me-2" style="display: none;" id="assign-spinner"></span>
+                                Add Annotator
+                            </button>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- Quick Actions -->
+                <div class="mb-4">
+                    <h6 class="text-muted">Quick Actions</h6>
+                    <div class="d-grid gap-2">
+                        <button class="btn btn-outline-success btn-sm" onclick="quickAssign('auto')">
+                            🎯 Auto-assign
+                        </button>
+                        {% if document.get_assignment_count > 0 %}
+                        <button class="btn btn-outline-warning btn-sm" onclick="clearAllAnnotators()">
+                            ❌ Clear All
+                        </button>
+                        {% endif %}
+                        <button class="btn btn-outline-info btn-sm" onclick="duplicateDocument()">
+                            📋 Duplicate
+                        </button>
+                        <button class="btn btn-outline-danger btn-sm" onclick="deleteDocument()">
+                            🗑️ Delete
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Annotation Modes -->
+                <div class="mb-4">
+                    <h6 class="text-muted">Annotation Modes</h6>
+                    <div class="d-grid gap-2">
+                        {% if user.can_do_manual_annotation %}
+                        <a href="{% url 'annotation:manual_annotate' document.id %}" class="btn btn-primary btn-sm">
+                            ✋ Manual Annotation
+                        </a>
+                        {% endif %}
+                        {% if user.can_do_llm_assisted_annotation %}
+                        <a href="{% url 'annotation:llm_assisted_annotate' document.id %}" class="btn btn-success btn-sm">
+                            🤖 LLM-Assisted Annotation
+                        </a>
+                        {% endif %}
+                        {% if user.is_admin %}
+                        <a href="{% url 'annotation:annotate_document' document.id %}" class="btn btn-outline-secondary btn-sm">
+                            🔧 Admin LLM Only (Legacy)
+                        </a>
+                        {% endif %}
+                    </div>
+                    <div class="mt-2">
+                        <small class="text-muted">
+                            {% if user.can_do_manual_annotation %}
+                            <strong>Manual:</strong> Pure manual entity selection<br>
+                            {% endif %}
+                            {% if user.can_do_llm_assisted_annotation %}
+                            <strong>LLM-Assisted:</strong> Review and approve/reject LLM suggestions<br>
+                            {% endif %}
+                            {% if user.is_admin %}
+                            <strong>Legacy:</strong> Admin-only automatic LLM annotation
+                            {% endif %}
+                        </small>
+                    </div>
+                </div>
+
+                <!-- LLM Processing -->
+                <div class="mb-4">
+                    <h6 class="text-muted">🤖 AI Processing - NER</h6>
+
+                    <!-- Model Selector -->
+                    <div class="mb-2">
+                        <label for="model-selector" class="form-label small text-muted mb-1">Select Model:</label>
+                        <select class="form-select form-select-sm" id="model-selector">
+                            <optgroup label="Google Gemini">
+                                <option value="gemini-2.5-flash" selected>Gemini 2.5 Flash (Fast & Cheap)</option>
+                                <option value="gemini-2.5-pro">Gemini 2.5 Pro (Advanced)</option>
+                            </optgroup>
+                            <optgroup label="OpenAI">
+                                <option value="gpt-4o">GPT-4o (Latest)</option>
+                                <option value="gpt-4o-mini">GPT-4o Mini (Fast & Cheap)</option>
+                                <option value="gpt-4-turbo">GPT-4 Turbo</option>
+                                <option value="gpt-5-mini-2025-08-07">GPT-5 Mini (New - Aug 2025)</option>
+                            </optgroup>
+                            <optgroup label="Other">
+                                <option value="deepseek-chat">DeepSeek Chat</option>
+                            </optgroup>
+                        </select>
+                    </div>
+
+                    <div class="d-grid gap-2">
+                        <button class="btn btn-warning btn-sm" id="run-langextract-btn">
+                            ⚡ Run LangExtract
+                        </button>
+                        <a href="{% url 'annotation:batch_multi_llm_ner' %}?documents={{ document.id }}" class="btn btn-info btn-sm">
+                            🔄 Multi-LLM NER
+                        </a>
+                    </div>
+                    <div class="mt-2">
+                        <small class="text-muted">
+                            <strong>LangExtract:</strong> Fast medical entity extraction<br>
+                            <strong>Multi-LLM:</strong> Consensus from multiple models
+                        </small>
+                    </div>
+                </div>
+
+                <!-- MCN Processing -->
+                <div class="mb-4">
+                    <h6 class="text-muted">🩺 Medical Concept Normalization (MCN)</h6>
+
+                    <!-- MCN Model Selector -->
+                    <div class="mb-2">
+                        <label for="mcn-model-selector" class="form-label small text-muted mb-1">Select Model for MCN:</label>
+                        <select class="form-select form-select-sm" id="mcn-model-selector">
+                            <optgroup label="Google Gemini">
+                                <option value="gemini-2.5-flash" selected>Gemini 2.5 Flash (Fast & Cheap)</option>
+                                <option value="gemini-2.5-pro">Gemini 2.5 Pro (Advanced)</option>
+                            </optgroup>
+                            <optgroup label="OpenAI">
+                                <option value="gpt-4o">GPT-4o (Latest)</option>
+                                <option value="gpt-4o-mini">GPT-4o Mini (Fast & Cheap)</option>
+                                <option value="gpt-4-turbo">GPT-4 Turbo</option>
+                                <option value="gpt-5-mini-2025-08-07">GPT-5 Mini (New - Aug 2025)</option>
+                            </optgroup>
+                            <optgroup label="Other">
+                                <option value="deepseek-chat">DeepSeek Chat</option>
+                            </optgroup>
+                        </select>
+                    </div>
+
+                    <div class="d-grid gap-2">
+                        <button class="btn btn-primary btn-sm" id="run-three-step-mcn-btn">
+                            🚀 Run 3-Step MCN
+                        </button>
+                        <a href="{% url 'annotation:mcn_llm_assisted' document.id %}" class="btn btn-outline-primary btn-sm">
+                            📝 MCN Interface
+                        </a>
+                    </div>
+                    <div class="mt-2">
+                        <small class="text-muted">
+                            <strong>3-Step MCN:</strong> Translation → Normalization → SNOMED<br>
+                            <strong>MCN Interface:</strong> Full interactive MCN workflow
+                        </small>
+                    </div>
+
+                    <!-- MCN Progress Panel (hidden by default) -->
+                    <div id="mcn-progress-panel" class="mt-3" style="display: none;">
+                        <div class="card">
+                            <div class="card-body p-2">
+                                <h6 class="card-title text-muted small mb-2">MCN Progress</h6>
+
+                                <!-- Step 1: Translation -->
+                                <div class="mb-2">
+                                    <div class="d-flex justify-content-between small">
+                                        <span><span class="badge bg-primary">1</span> Translation</span>
+                                        <span id="mcn-step1-status" class="text-muted">0/0</span>
+                                    </div>
+                                    <div class="progress" style="height: 4px;">
+                                        <div id="mcn-step1-progress" class="progress-bar bg-primary" style="width: 0%"></div>
+                                    </div>
+                                </div>
+
+                                <!-- Step 2: Normalization -->
+                                <div class="mb-2">
+                                    <div class="d-flex justify-content-between small">
+                                        <span><span class="badge bg-success">2</span> Normalization</span>
+                                        <span id="mcn-step2-status" class="text-muted">0/0</span>
+                                    </div>
+                                    <div class="progress" style="height: 4px;">
+                                        <div id="mcn-step2-progress" class="progress-bar bg-success" style="width: 0%"></div>
+                                    </div>
+                                </div>
+
+                                <!-- Step 3: SNOMED Mapping -->
+                                <div class="mb-2">
+                                    <div class="d-flex justify-content-between small">
+                                        <span><span class="badge bg-info">3</span> SNOMED</span>
+                                        <span id="mcn-step3-status" class="text-muted">0/0</span>
+                                    </div>
+                                    <div class="progress" style="height: 4px;">
+                                        <div id="mcn-step3-progress" class="progress-bar bg-info" style="width: 0%"></div>
+                                    </div>
+                                </div>
+
+                                <div class="mt-2">
+                                    <small id="mcn-result-message" class="text-muted"></small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Document Statistics -->
+        <div class="card mt-4">
+            <div class="card-header">
+                <h5 class="card-title mb-0">📊 Statistics</h5>
+            </div>
+            <div class="card-body">
+                <div class="row text-center">
+                    <div class="col-6">
+                        <div class="border-end">
+                            <h6 class="text-primary">{{ document.word_count }}</h6>
+                            <small class="text-muted">Words</small>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <h6 class="text-info">{{ document.character_count }}</h6>
+                        <small class="text-muted">Characters</small>
+                    </div>
+                </div>
+                <hr>
+                <div class="text-center">
+                    <h6 class="text-success">{{ document.word_count }}</h6>
+                    <small class="text-muted">Estimated Reading Time: ~{% widthratio document.word_count 200 1 %} min</small>
+                </div>
+            </div>
+        </div>
+
+        <!-- Navigation -->
+        <div class="card mt-4">
+            <div class="card-header">
+                <h5 class="card-title mb-0">🧭 Navigation</h5>
+            </div>
+            <div class="card-body">
+                <div class="d-grid gap-2">
+                    <a href="{% url 'annotation:document_list' %}?status={{ document.status }}" class="btn btn-outline-primary btn-sm">
+                        📋 View {{ document.get_status_display }} Documents
+                    </a>
+                    {% if document.get_assignment_count > 0 %}
+                    {% for annotator in document.get_assigned_annotators %}
+                    <a href="{% url 'annotation:document_list' %}?annotator={{ annotator.id }}" class="btn btn-outline-info btn-sm mb-1">
+                        👤 View {{ annotator.username }}'s Documents
+                    </a>
+                    {% endfor %}
+                    {% endif %}
+                    {% if document.source_file %}
+                    <a href="{% url 'annotation:import_history' %}" class="btn btn-outline-secondary btn-sm">
+                        📁 View Import History
+                    </a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Visualize existing NER annotations on page load
+    {% if latest_ner and latest_ner.entities_json %}
+    const existingNerEntities = {{ latest_ner.entities_json|safe }};
+    if (existingNerEntities && existingNerEntities.length > 0) {
+        visualizeExistingNerEntities(existingNerEntities);
+    }
+    {% endif %}
+
+    const assignmentForm = document.getElementById('assignment-form');
+    const assignSpinner = document.getElementById('assign-spinner');
+
+    assignmentForm.addEventListener('submit', function(e) {
+        e.preventDefault();
+
+        const annotatorSelect = this.annotator_id;
+        const annotatorId = annotatorSelect.value;
+        const annotatorName = annotatorSelect.options[annotatorSelect.selectedIndex].text;
+
+        if (!annotatorId) {
+            alert('Please select an annotator.');
+            return;
+        }
+
+        // Show loading state
+        assignSpinner.style.display = 'inline-block';
+        this.querySelector('button[type="submit"]').disabled = true;
+
+        const formData = new FormData();
+        formData.append('csrfmiddlewaretoken', this.csrfmiddlewaretoken.value);
+        formData.append('annotator_id', annotatorId);
+
+        fetch('{% url "annotation:assign_document" document.id %}', {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => {
+            const ct = response.headers.get('content-type') || '';
+            if (!ct.includes('application/json')) {
+                throw new Error(response.redirected || response.status === 302 ? 'Session expired. Please refresh and log in again.' : 'Server returned non-JSON response.');
+            }
+            return response.json();
+        })
+        .then(data => {
+            if (data.success) {
+                // Show success message
+                const alertDiv = document.createElement('div');
+                alertDiv.className = 'alert alert-success alert-dismissible fade show mt-3';
+                alertDiv.innerHTML = `
+                    ${data.message}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                `;
+                document.querySelector('.card-body').appendChild(alertDiv);
+
+                // Refresh page after 1.5 seconds
+                setTimeout(() => {
+                    window.location.reload();
+                }, 1500);
+            } else {
+                alert('Error: ' + data.error);
+            }
+        })
+        .catch(error => {
+            console.error('Assignment error:', error);
+            alert('Assignment failed: ' + error.message);
+        })
+        .finally(() => {
+            // Reset loading state
+            assignSpinner.style.display = 'none';
+            this.querySelector('button[type="submit"]').disabled = false;
+        });
+    });
+});
+
+function quickAssign(mode) {
+    if (mode === 'auto') {
+        // Auto-assign to least loaded annotator
+        alert('Auto-assignment feature will be implemented in future versions.');
+    }
+}
+
+function removeAnnotator(annotatorId, annotatorName) {
+    if (confirm(`Remove ${annotatorName} from this document?`)) {
+        const formData = new FormData();
+        formData.append('csrfmiddlewaretoken', document.querySelector('[name=csrfmiddlewaretoken]').value);
+        formData.append('annotator_id', annotatorId);
+        formData.append('action', 'remove');
+
+        fetch('{% url "annotation:assign_document" document.id %}', {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => {
+            const ct = response.headers.get('content-type') || '';
+            if (!ct.includes('application/json')) {
+                throw new Error(response.redirected ? 'Session expired. Please refresh and log in again.' : 'Server returned non-JSON response.');
+            }
+            return response.json();
+        })
+        .then(data => {
+            if (data.success) {
+                alert(data.message);
+                window.location.reload();
+            } else {
+                alert('Error: ' + data.error);
+            }
+        })
+        .catch(error => {
+            console.error('Remove annotator error:', error);
+            alert('Remove failed: ' + error.message);
+        });
+    }
+}
+
+function clearAllAnnotators() {
+    if (confirm('Remove all annotators from this document?')) {
+        const formData = new FormData();
+        formData.append('csrfmiddlewaretoken', document.querySelector('[name=csrfmiddlewaretoken]').value);
+        formData.append('action', 'clear');
+
+        fetch('{% url "annotation:assign_document" document.id %}', {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => {
+            const ct = response.headers.get('content-type') || '';
+            if (!ct.includes('application/json')) {
+                throw new Error(response.redirected ? 'Session expired. Please refresh and log in again.' : 'Server returned non-JSON response.');
+            }
+            return response.json();
+        })
+        .then(data => {
+            if (data.success) {
+                alert(data.message);
+                window.location.reload();
+            } else {
+                alert('Error: ' + data.error);
+            }
+        })
+        .catch(error => {
+            console.error('Clear annotators error:', error);
+            alert('Clear failed: ' + error.message);
+        });
+    }
+}
+
+function duplicateDocument() {
+    alert('Document duplication feature will be implemented in future versions.');
+}
+
+function deleteDocument() {
+    if (confirm('Are you sure you want to delete this document? This action cannot be undone.')) {
+        alert('Document deletion feature will be implemented in future versions.');
+    }
+}
+
+// Helper function to show error alerts
+function showErrorAlert(errorMessage) {
+    const alertDiv = document.createElement('div');
+    alertDiv.className = 'alert alert-danger alert-dismissible fade show';
+    alertDiv.innerHTML = `
+        <h6>❌ LangExtract Error</h6>
+        <p class="mb-0">${errorMessage}</p>
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    `;
+
+    // Insert at the top of the main content area
+    const mainContent = document.querySelector('.card-body');
+    if (mainContent) {
+        mainContent.insertBefore(alertDiv, mainContent.firstChild);
+    }
+
+    // Auto-dismiss after 15 seconds (longer for errors so users can read them)
+    setTimeout(() => {
+        alertDiv.remove();
+    }, 15000);
+}
+
+// LangExtract handler
+document.getElementById('run-langextract-btn').addEventListener('click', function() {
+    const btn = this;
+    const originalText = btn.innerHTML;
+    const modelSelector = document.getElementById('model-selector');
+    const selectedModel = modelSelector.value;
+    const selectedModelText = modelSelector.options[modelSelector.selectedIndex].text;
+
+    if (!confirm(`Run LangExtract on this document?\n\nModel: ${selectedModelText}\n\nThis will extract medical entities using AI.`)) {
+        return;
+    }
+
+    // Show loading state
+    btn.disabled = true;
+    modelSelector.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Running LangExtract...';
+
+    const formData = new FormData();
+    formData.append('csrfmiddlewaretoken', document.querySelector('[name=csrfmiddlewaretoken]').value);
+    formData.append('document_id', '{{ document.id }}');
+    formData.append('model_id', selectedModel);
+
+    const langextractWithRetry = async (attempt = 0) => {
+        const maxRetries = 1;
+        const response = await fetch('{% url "annotation:run_langextract" %}', {
+            method: 'POST',
+            body: formData
+        });
+
+        const contentType = response.headers.get('content-type') || '';
+        if (!contentType.includes('application/json')) {
+            const text = await response.text();
+            if (text.includes('<html') || text.includes('<!DOCTYPE')) {
+                if (response.redirected || text.includes('login')) {
+                    throw new Error('Session expired. Please refresh the page and log in again.');
+                }
+                // Retry on transient HTML errors (e.g. LLM service returning error page)
+                if (attempt < maxRetries) {
+                    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Retrying LangExtract...';
+                    await new Promise(r => setTimeout(r, 3000));
+                    return langextractWithRetry(attempt + 1);
+                }
+            }
+            throw new Error(`Server returned non-JSON response (HTTP ${response.status}). The LLM service may be temporarily unavailable - please try again.`);
+        }
+
+        if (!response.ok) {
+            const data = await response.json();
+            // Retry on transient server errors
+            if (attempt < maxRetries && (response.status >= 500 || (data.error && (data.error.includes('rate') || data.error.includes('quota'))))) {
+                btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Retrying LangExtract...';
+                await new Promise(r => setTimeout(r, 3000));
+                return langextractWithRetry(attempt + 1);
+            }
+            throw new Error(data.error || 'Failed to run LangExtract');
+        }
+
+        return response.json();
+    };
+
+    langextractWithRetry()
+    .then(data => {
+        if (data.success) {
+            // Show success message
+            const alertDiv = document.createElement('div');
+            alertDiv.className = 'alert alert-success alert-dismissible fade show';
+            alertDiv.innerHTML = `
+                <h6>✅ LangExtract Complete!</h6>
+                <p class="mb-0">${data.message}</p>
+                ${data.entities_count ? `<p class="mb-0 mt-2"><strong>${data.entities_count} entities extracted</strong></p>` : ''}
+                ${data.processing_time ? `<small class="text-muted">Processing time: ${data.processing_time}s</small>` : ''}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            `;
+            btn.parentElement.parentElement.insertBefore(alertDiv, btn.parentElement);
+
+            // Auto-dismiss after 10 seconds
+            setTimeout(() => {
+                alertDiv.remove();
+            }, 10000);
+
+            // Visualize entities if available
+            if (data.entities && data.entities.length > 0) {
+                visualizeEntities(data.entities);
+            }
+        } else {
+            // Show error in Bootstrap alert
+            showErrorAlert(data.error || 'Failed to run LangExtract');
+        }
+    })
+    .catch(error => {
+        console.error('LangExtract error:', error);
+        showErrorAlert(error.message || 'Failed to run LangExtract. Please try again.');
+    })
+    .finally(() => {
+        // Reset button and model selector
+        btn.disabled = false;
+        modelSelector.disabled = false;
+        btn.innerHTML = originalText;
+    });
+});
+
+// Escape HTML to prevent rendering issues
+function escapeHtmlText(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+// Resolve overlapping entities: keep longer spans, remove overlaps
+function resolveOverlaps(entities) {
+    if (!entities || entities.length === 0) return [];
+
+    // Normalize field names and filter invalid
+    const normalized = entities.map(e => ({
+        start: e.start_offset || e.start || 0,
+        end: e.end_offset || e.end || 0,
+        label: e.label || e.entity_type || 'UNKNOWN',
+        text: e.text || '',
+        confidence: e.confidence || 0,
+        original: e
+    })).filter(e => e.end > e.start);
+
+    // Sort by start ascending, then by span length descending (prefer longer)
+    normalized.sort((a, b) => a.start - b.start || (b.end - b.start) - (a.end - a.start));
+
+    // Remove overlaps: keep earlier/longer entities
+    const result = [];
+    let lastEnd = 0;
+    for (const entity of normalized) {
+        if (entity.start >= lastEnd) {
+            result.push(entity);
+            lastEnd = entity.end;
+        }
+    }
+    return result;
+}
+
+// Build highlighted HTML from text and non-overlapping entities
+function buildHighlightedHtml(text, entities, options = {}) {
+    const resolved = resolveOverlaps(entities);
+    const idPrefix = options.idPrefix || 'entity';
+    const useClasses = options.useClasses !== false;
+
+    let result = '';
+    let lastIndex = 0;
+
+    resolved.forEach((entity, index) => {
+        // Clamp to text bounds
+        const start = Math.max(0, Math.min(entity.start, text.length));
+        const end = Math.max(start, Math.min(entity.end, text.length));
+
+        // Escape text before this entity
+        if (start > lastIndex) {
+            result += escapeHtmlText(text.substring(lastIndex, start));
+        }
+
+        // Build highlighted span
+        const entityText = escapeHtmlText(text.substring(start, end));
+        const label = entity.label;
+        const title = escapeHtmlText(`${label}: ${entity.text}`);
+
+        if (useClasses) {
+            result += `<span class="entity-highlight entity-${label}" id="${idPrefix}-${index}" title="${title}">${entityText}</span>`;
+        } else {
+            const color = (typeof ENTITY_COLORS !== 'undefined' && ENTITY_COLORS[label]) || '#6c757d';
+            result += `<span class="entity-highlight" style="background-color: ${color}; color: white; padding: 2px 4px; border-radius: 3px; font-weight: 500;" title="${title}">${entityText}</span>`;
+        }
+
+        lastIndex = end;
+    });
+
+    // Escape remaining text
+    if (lastIndex < text.length) {
+        result += escapeHtmlText(text.substring(lastIndex));
+    }
+
+    return result;
+}
+
+// Visualize existing NER entities on page load
+function visualizeExistingNerEntities(entities) {
+    const documentContent = `{{ document.content|escapejs }}`;
+    const highlightedContent = document.getElementById('existing-ner-highlighted-content');
+
+    if (!highlightedContent) return;
+
+    highlightedContent.innerHTML = buildHighlightedHtml(documentContent, entities, {
+        idPrefix: 'existing-entity',
+        useClasses: true
+    });
+}
+
+// Filter out entities whose span is completely contained within a longer entity
+function filterSubsetEntities(entities) {
+    return entities.filter((e, i) => {
+        const s1 = e.start_offset || e.start || 0;
+        const e1 = e.end_offset || e.end || 0;
+        return !entities.some((other, j) => {
+            if (i === j) return false;
+            const s2 = other.start_offset || other.start || 0;
+            const e2 = other.end_offset || other.end || 0;
+            return s2 <= s1 && e1 <= e2 && (e2 - s2) > (e1 - s1);
+        });
+    });
+}
+
+// Visualize extracted entities
+function visualizeEntities(entities) {
+    const documentContent = `{{ document.content|escapejs }}`;
+    const resultsSection = document.getElementById('langextract-results');
+    const highlightedContent = document.getElementById('highlighted-content');
+    const entityList = document.getElementById('entity-list');
+
+    highlightedContent.innerHTML = buildHighlightedHtml(documentContent, entities, {
+        idPrefix: 'entity',
+        useClasses: true
+    });
+
+    // Filter subset entities for the list display (highlight already resolves overlaps)
+    const displayEntities = filterSubsetEntities(entities);
+
+    // Group entities by type
+    const entityGroups = {};
+    displayEntities.forEach(entity => {
+        if (!entityGroups[entity.entity_type]) {
+            entityGroups[entity.entity_type] = [];
+        }
+        entityGroups[entity.entity_type].push(entity);
+    });
+
+    // Create entity list
+    let entityListHTML = '';
+    const typeLabels = {
+        'SYMPTOM': '🤒 Symptoms',
+        'DISEASE': '🦠 Diseases',
+        'BODY_PART': '🫀 Body Parts',
+        'MEDICATION': '💊 Medications',
+        'PROCEDURE': '🏥 Procedures'
+    };
+
+    Object.keys(entityGroups).sort().forEach(type => {
+        entityListHTML += `
+            <div class="col-md-6">
+                <div class="entity-card ${type}">
+                    <h6 class="mb-2">${typeLabels[type] || type}</h6>
+                    <ul class="list-unstyled mb-0">
+                        ${entityGroups[type].map(e => `
+                            <li class="mb-1">
+                                <strong>${e.text}</strong>
+                                ${e.confidence ? `<small class="text-muted">(${(e.confidence * 100).toFixed(0)}%)</small>` : ''}
+                            </li>
+                        `).join('')}
+                    </ul>
+                </div>
+            </div>
+        `;
+    });
+
+    entityList.innerHTML = entityListHTML;
+
+    // Show results section
+    resultsSection.style.display = 'block';
+
+    // Scroll to results
+    resultsSection.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+// 3-Step MCN Handler
+document.getElementById('run-three-step-mcn-btn').addEventListener('click', function() {
+    const btn = this;
+    const originalText = btn.innerHTML;
+    const modelSelector = document.getElementById('mcn-model-selector');
+    const selectedModel = modelSelector.value;
+    const selectedModelText = modelSelector.options[modelSelector.selectedIndex].text;
+
+    if (!confirm(`Run 3-Step MCN on this document?\n\nModel: ${selectedModelText}\n\nThis will:\n1. Translate Indonesian → English\n2. Normalize to medical terms\n3. Map to SNOMED-CT codes`)) {
+        return;
+    }
+
+    // Show loading state
+    btn.disabled = true;
+    modelSelector.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Running 3-Step MCN...';
+
+    // Show progress panel
+    const progressPanel = document.getElementById('mcn-progress-panel');
+    progressPanel.style.display = 'block';
+
+    // Reset progress
+    resetMCNProgress();
+
+    const formData = new FormData();
+    formData.append('csrfmiddlewaretoken', document.querySelector('[name=csrfmiddlewaretoken]').value);
+    formData.append('document_id', '{{ document.id }}');
+    formData.append('model_id', selectedModel);
+
+    const mcnWithRetry = async (attempt = 0) => {
+        const maxRetries = 1;
+        const response = await fetch('{% url "annotation:run_three_step_mcn" %}', {
+            method: 'POST',
+            body: formData
+        });
+
+        const contentType = response.headers.get('content-type') || '';
+        if (!contentType.includes('application/json')) {
+            const text = await response.text();
+            if (text.includes('<html') || text.includes('<!DOCTYPE')) {
+                if (response.redirected || text.includes('login')) {
+                    throw new Error('Session expired. Please refresh the page and log in again.');
+                }
+                if (attempt < maxRetries) {
+                    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Retrying 3-Step MCN...';
+                    await new Promise(r => setTimeout(r, 3000));
+                    return mcnWithRetry(attempt + 1);
+                }
+            }
+            throw new Error(`Server returned non-JSON response (HTTP ${response.status}). The LLM service may be temporarily unavailable - please try again.`);
+        }
+
+        if (!response.ok) {
+            const data = await response.json();
+            if (attempt < maxRetries && (response.status >= 500 || (data.error && (data.error.includes('rate') || data.error.includes('quota'))))) {
+                btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Retrying 3-Step MCN...';
+                await new Promise(r => setTimeout(r, 3000));
+                return mcnWithRetry(attempt + 1);
+            }
+            throw new Error(data.error || 'Failed to run 3-Step MCN');
+        }
+
+        return response.json();
+    };
+
+    mcnWithRetry()
+    .then(data => {
+        if (data.success) {
+            // Update progress based on results
+            if (data.statistics) {
+                const stats = data.statistics;
+                const totalEntities = stats.total_entities || 0;
+
+                // Step 1: Translation
+                const translatedCount = stats.successfully_translated || 0;
+                updateMCNProgress(1, translatedCount, totalEntities);
+
+                // Step 2: Normalization (same as translation if successful)
+                updateMCNProgress(2, translatedCount, totalEntities);
+
+                // Step 3: SNOMED Mapping
+                const mappedCount = stats.successfully_mapped || 0;
+                updateMCNProgress(3, mappedCount, totalEntities);
+
+                // Show result message
+                const mappingRate = totalEntities > 0 ? Math.round((mappedCount / totalEntities) * 100) : 0;
+                const resultMessage = document.getElementById('mcn-result-message');
+                resultMessage.innerHTML = `
+                    <strong>✅ Complete!</strong>
+                    ${mappedCount}/${totalEntities} entities mapped (${mappingRate}%)
+                `;
+                resultMessage.className = mappingRate >= 70 ? 'text-success' : mappingRate >= 40 ? 'text-warning' : 'text-danger';
+            }
+
+            // Show success message
+            const alertDiv = document.createElement('div');
+            alertDiv.className = 'alert alert-success alert-dismissible fade show';
+            alertDiv.innerHTML = `
+                <h6>✅ 3-Step MCN Complete!</h6>
+                <p class="mb-0">${data.message}</p>
+                ${data.entities_count ? `<p class="mb-0 mt-2"><strong>${data.entities_count} entities processed</strong></p>` : ''}
+                ${data.processing_time ? `<small class="text-muted">Processing time: ${data.processing_time}s</small>` : ''}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            `;
+            btn.parentElement.parentElement.insertBefore(alertDiv, btn.parentElement);
+
+            // Auto-dismiss after 10 seconds
+            setTimeout(() => {
+                alertDiv.remove();
+            }, 10000);
+
+        } else {
+            // Show error in Bootstrap alert
+            showErrorAlert(data.error || 'Failed to run 3-Step MCN');
+        }
+    })
+    .catch(error => {
+        console.error('3-Step MCN error:', error);
+        showErrorAlert(error.message || 'Failed to run 3-Step MCN. Please try again.');
+    })
+    .finally(() => {
+        // Reset button and model selector
+        btn.disabled = false;
+        modelSelector.disabled = false;
+        btn.innerHTML = originalText;
+    });
+});
+
+function resetMCNProgress() {
+    document.getElementById('mcn-step1-progress').style.width = '0%';
+    document.getElementById('mcn-step2-progress').style.width = '0%';
+    document.getElementById('mcn-step3-progress').style.width = '0%';
+    document.getElementById('mcn-step1-status').textContent = '0/0';
+    document.getElementById('mcn-step2-status').textContent = '0/0';
+    document.getElementById('mcn-step3-status').textContent = '0/0';
+    document.getElementById('mcn-result-message').textContent = '';
+}
+
+function updateMCNProgress(step, completed, total) {
+    const percentage = total > 0 ? (completed / total) * 100 : 0;
+    document.getElementById(`mcn-step${step}-progress`).style.width = percentage + '%';
+    document.getElementById(`mcn-step${step}-status`).textContent = `${completed}/${total}`;
+}
+</script>
+{% endblock %}

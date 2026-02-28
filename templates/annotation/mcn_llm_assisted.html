@@ -1,0 +1,1286 @@
+{% extends 'base.html' %}
+
+{% block title %}LLM-Assisted MCN - AnnoHID{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h2>🤖 LLM-Assisted Medical Concept Normalization (MCN)</h2>
+            <div>
+                <a href="{% url 'annotation:annotator_documents' %}" class="btn btn-outline-secondary">
+                    ← Back to My Documents
+                </a>
+                {% if user.can_do_manual_annotation %}
+                <a href="{% url 'annotation:mcn_manual' document.id %}" class="btn btn-outline-primary">
+                    📝 Switch to Manual MCN
+                </a>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Instructions -->
+<div class="alert alert-success mb-4">
+    <h5><i class="fas fa-robot me-2"></i>LLM-Assisted MCN: 3-Step Intelligent Workflow</h5>
+    <ol class="mb-0">
+        <li><strong>Step 1: Indonesian → English Translation</strong> - AI translates Indonesian medical terms to English (e.g., "sakit kepala" → "headache")</li>
+        <li><strong>Step 2: Normalize to Formal Medical Terms</strong> - AI converts informal English to formal terminology (e.g., "headache" → "cephalgia")</li>
+        <li><strong>Step 3: Find SNOMED-CT Codes</strong> - AI searches for official SNOMED codes using optimized terms (e.g., "cephalgia" → "25064002")</li>
+        <li><strong>Review & Adjust</strong> - Accept, modify, or retry AI suggestions for each entity</li>
+        <li><strong>Save Results</strong> - Complete the MCN task when satisfied with all mappings</li>
+    </ol>
+    <div class="mt-2">
+        <small class="text-muted">
+            <i class="fas fa-info-circle me-1"></i>
+            <strong>Note:</strong> This workflow intelligently handles both Indonesian and English medical terms, automatically detecting language and applying appropriate processing steps.
+        </small>
+    </div>
+</div>
+
+<div class="row">
+    <!-- Document Content -->
+    <div class="col-lg-8">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">📄 Document Content with NER Entities</h5>
+            </div>
+            <div class="card-body">
+                <div class="annotation-text" id="documentText" style="white-space: pre-wrap; line-height: 1.8;">
+                    <!-- Content will be populated by JavaScript with entity highlighting -->
+                </div>
+            </div>
+        </div>
+
+        <!-- AI Normalization Panel -->
+        <div class="card mt-4">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    🤖 AI-Assisted Entity Normalization
+                    (<span id="totalEntities">0</span> entities,
+                    <span id="normalizedCount" class="text-success">0</span> normalized,
+                    <span id="mappedCount" class="text-primary">0</span> mapped)
+                </h5>
+            </div>
+            <div class="card-body">
+                <!-- Entity Search Box -->
+                <div class="mb-3">
+                    <input type="text"
+                           id="entitySearchInput"
+                           class="form-control"
+                           placeholder="🔍 Search entities by text or type..."
+                           onkeyup="filterEntities()">
+                    <small class="text-muted">
+                        <span id="filteredCount">{{ ner_entities|length }}</span> of <span id="totalEntitiesCount">{{ ner_entities|length }}</span> entities shown
+                    </small>
+                </div>
+
+                <!-- Selection Toolbar -->
+                <div class="d-flex flex-wrap align-items-center gap-2 mb-3 p-2 bg-light rounded border">
+                    <span class="fw-bold small text-muted me-1"><i class="fas fa-check-square me-1"></i>Select:</span>
+                    <button type="button" class="btn btn-outline-secondary btn-sm" onclick="selectAllEntities()">
+                        All
+                    </button>
+                    <button type="button" class="btn btn-outline-secondary btn-sm" onclick="selectNoneEntities()">
+                        None
+                    </button>
+                    <button type="button" class="btn btn-outline-primary btn-sm" onclick="selectUnmappedEntities()">
+                        <i class="fas fa-filter me-1"></i>Unmapped Only
+                    </button>
+                    <span class="ms-auto badge bg-primary" id="selectedCountBadge">0 selected</span>
+                </div>
+
+                <div class="mb-3 d-flex align-items-center gap-3 flex-wrap">
+                    <button type="button" class="btn btn-primary btn-lg" onclick="processSelectedEntities()" id="processBtn" data-bs-toggle="tooltip" title="Processes selected entities through 3 steps: Translation → Normalization → SNOMED Lookup">
+                        <i class="fas fa-magic me-2"></i>🚀 Process Selected (<span id="processBtnCount">0</span>)
+                    </button>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="skipMappedCheckbox" checked>
+                        <label class="form-check-label small" for="skipMappedCheckbox">
+                            Skip already mapped entities
+                        </label>
+                    </div>
+                </div>
+                <div class="alert alert-info alert-sm mb-3" id="stepIndicator" style="display: none;">
+                    <small><i class="fas fa-info-circle me-1"></i><span id="stepMessage"></span></small>
+                </div>
+                <div id="entityList" class="entity-list">
+                    <div class="text-center text-muted">Loading entities...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Control Panel -->
+    <div class="col-lg-4">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">⚙️ MCN Controls</h5>
+            </div>
+            <div class="card-body">
+                <div class="d-grid gap-2">
+                    <button type="button" class="btn btn-success" onclick="saveMCN()">
+                        <i class="fas fa-save me-2"></i>Save MCN Results
+                    </button>
+                    <button type="button" class="btn btn-outline-warning" onclick="resetAll()">
+                        <i class="fas fa-undo me-2"></i>Reset All
+                    </button>
+                </div>
+
+                <div class="mt-4">
+                    <h6 class="text-muted">Processing Progress</h6>
+
+                    <!-- Step 1: Translation Progress -->
+                    <div class="mb-3">
+                        <label class="small fw-bold">
+                            <span class="badge bg-primary me-1">1</span>
+                            Indonesian → English
+                        </label>
+                        <div class="progress mb-1">
+                            <div class="progress-bar bg-primary" role="progressbar" id="translationProgress" style="width: 0%"></div>
+                        </div>
+                        <small class="text-muted">
+                            <span id="translatedCounter">0</span> of <span id="totalTranslationCounter">0</span> terms translated
+                        </small>
+                    </div>
+
+                    <!-- Step 2: Normalization Progress -->
+                    <div class="mb-3">
+                        <label class="small fw-bold">
+                            <span class="badge bg-success me-1">2</span>
+                            Formal Medical Terms
+                        </label>
+                        <div class="progress mb-1">
+                            <div class="progress-bar bg-success" role="progressbar" id="normalizationProgress" style="width: 0%"></div>
+                        </div>
+                        <small class="text-muted">
+                            <span id="normalizedCounter">0</span> of <span id="totalCounter">0</span> terms normalized
+                        </small>
+                    </div>
+
+                    <!-- Step 3: Mapping Progress -->
+                    <div class="mb-3">
+                        <label class="small fw-bold">
+                            <span class="badge bg-info me-1">3</span>
+                            SNOMED-CT Codes
+                        </label>
+                        <div class="progress mb-1">
+                            <div class="progress-bar bg-info" role="progressbar" id="mappingProgress" style="width: 0%"></div>
+                        </div>
+                        <small class="text-muted">
+                            <span id="mappedCounter">0</span> of <span id="totalMappingCounter">0</span> codes found
+                        </small>
+                    </div>
+                </div>
+
+                <div class="mt-4">
+                    <h6 class="text-muted">AI Status</h6>
+                    <div class="mb-2">
+                        <span class="badge bg-light text-dark border">Not Started</span>
+                    </div>
+                    <div class="mb-2">
+                        <span class="badge bg-warning">Normalizing</span>
+                    </div>
+                    <div class="mb-2">
+                        <span class="badge bg-info">Mapping</span>
+                    </div>
+                    <div class="mb-2">
+                        <span class="badge bg-success">Completed</span>
+                    </div>
+                </div>
+
+                <div class="mt-4">
+                    <h6 class="text-muted">Entity Types</h6>
+                    <div class="d-flex flex-wrap gap-1">
+                        <span class="badge entity-badge entity-SYMPTOM">SYMPTOM</span>
+                        <span class="badge entity-badge entity-DISEASE">DISEASE</span>
+                        <span class="badge entity-badge entity-BODY_PART">BODY_PART</span>
+                        <span class="badge entity-badge entity-MEDICATION">MEDICATION</span>
+                        <span class="badge entity-badge entity-PROCEDURE">PROCEDURE</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        {% if request.user.role == 'admin' %}
+        <!-- AI Information (admin only) -->
+        <div class="card mt-4">
+            <div class="card-header bg-success text-white">
+                <h6 class="card-title mb-0">🤖 AI Assistant Info</h6>
+            </div>
+            <div class="card-body">
+                <div class="mb-2">
+                    <strong>Model:</strong> Gemini 2.5 Flash
+                </div>
+                <div class="mb-2">
+                    <strong>Workflow:</strong> 3-Step MCN
+                </div>
+                <div class="mb-2">
+                    <strong>Translation:</strong> Indonesian → English
+                </div>
+                <div class="mb-2">
+                    <strong>Normalization:</strong> Formal Medical Terms
+                </div>
+                <div class="mb-2">
+                    <strong>Auto-SNOMED:</strong> Enabled
+                </div>
+                <div>
+                    <strong>Confidence Threshold:</strong> 0.7
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Entity Detail Modal -->
+<div class="modal fade" id="entityModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">📝 Review Entity Normalization</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row">
+                    <div class="col-md-12">
+                        <h6>📌 Original Entity</h6>
+                        <div class="border rounded p-3 bg-light mb-3">
+                            <div><strong>Text:</strong> <span id="modalEntityText"></span></div>
+                            <div><strong>Type:</strong> <span id="modalEntityType"></span></div>
+                        </div>
+
+                        <!-- Step 1: Translation -->
+                        <h6>🌐 Step 1: Translation</h6>
+                        <div class="border rounded p-3 bg-primary bg-opacity-10 mb-3" id="modalTranslation">
+                            <div><strong>Indonesian:</strong> <span id="modalIndonesian"></span></div>
+                            <div><strong>English:</strong> <span id="modalEnglish"></span></div>
+                            <div><strong>Confidence:</strong> <span id="modalTranslationConfidence"></span></div>
+                            <small class="text-muted" id="modalTranslationNotes"></small>
+                        </div>
+
+                        <!-- Step 2: Normalization -->
+                        <h6>📝 Step 2: Normalization</h6>
+                        <div class="border rounded p-3 bg-success bg-opacity-10 mb-3" id="modalNormalization">
+                            <div><strong>Informal:</strong> <span id="modalInformal"></span></div>
+                            <div><strong>Formal Medical Term:</strong> <span id="modalFormal"></span></div>
+                            <div><strong>Confidence:</strong> <span id="modalNormalizationConfidence"></span></div>
+                            <small class="text-muted" id="modalNormalizationReasoning"></small>
+                        </div>
+
+                        <!-- Step 3: SNOMED Mapping -->
+                        <h6>🔗 Step 3: SNOMED-CT Mapping</h6>
+                        <div id="snomedMappingInfo" class="border rounded p-3 bg-info bg-opacity-10 mb-3">
+                            <div class="text-center text-muted">
+                                <i class="fas fa-search fa-2x mb-3"></i>
+                                <p>SNOMED-CT mapping will appear here after AI processing</p>
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="customNormalization" class="form-label">Override Final Term (Optional)</label>
+                            <input type="text" class="form-control" id="customNormalization" placeholder="Enter custom term..." onkeypress="if(event.key === 'Enter') { event.preventDefault(); searchCustomSnomed(); }">
+                        </div>
+
+                        <div class="mt-3">
+                            <button class="btn btn-outline-primary btn-sm" onclick="searchCustomSnomed()">
+                                <i class="fas fa-search me-2"></i>Manual SNOMED Search
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-success" onclick="acceptEntityChanges()">
+                    Accept Changes
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    /* Entity highlighting in document */
+    .ner-entity {
+        padding: 2px 4px;
+        border-radius: 4px;
+        cursor: pointer;
+        position: relative;
+        transition: all 0.2s;
+        border: 2px solid;
+        margin: 0 1px;
+        display: inline-block;
+    }
+
+    /* Entity colors by type */
+    .entity-SYMPTOM { border-color: #E74C3C; background-color: rgba(231, 76, 60, 0.15); }
+    .entity-DISEASE { border-color: #F39C12; background-color: rgba(243, 156, 18, 0.15); }
+    .entity-BODY_PART { border-color: #1ABC9C; background-color: rgba(26, 188, 156, 0.15); }
+    .entity-MEDICATION { border-color: #3498DB; background-color: rgba(52, 152, 219, 0.15); }
+    .entity-PROCEDURE { border-color: #9B59B6; background-color: rgba(155, 89, 182, 0.15); }
+
+    .entity-badge {
+        font-size: 0.75em;
+        color: white;
+    }
+    .entity-badge.entity-SYMPTOM { background-color: #E74C3C; }
+    .entity-badge.entity-DISEASE { background-color: #F39C12; }
+    .entity-badge.entity-BODY_PART { background-color: #1ABC9C; }
+    .entity-badge.entity-MEDICATION { background-color: #3498DB; }
+    .entity-badge.entity-PROCEDURE { background-color: #9B59B6; }
+
+    /* Entity list items */
+    .entity-item {
+        background: white;
+        border-radius: 8px;
+        padding: 1rem;
+        margin-bottom: 0.5rem;
+        border-left: 4px solid;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        transition: all 0.3s;
+    }
+
+    .entity-item:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+    }
+
+    .entity-item.not-started { border-left-color: #6c757d; }
+    .entity-item.normalizing { border-left-color: #ffc107; background-color: #fff8e1; }
+    .entity-item.mapping { border-left-color: #17a2b8; background-color: #e8f4f8; }
+    .entity-item.completed { border-left-color: #28a745; background-color: #f8fff9; }
+    .entity-item.entity-selected { outline: 2px solid rgba(13, 110, 253, 0.3); }
+    .entity-item.completed.entity-selected { outline-color: rgba(40, 167, 69, 0.3); }
+    .entity-select-checkbox { cursor: pointer; }
+
+    .normalization-result {
+        background: #e8f5e9;
+        border-radius: 6px;
+        padding: 0.75rem;
+        margin-top: 0.5rem;
+        border-left: 3px solid #28a745;
+    }
+
+    .snomed-mapping {
+        background: #e3f2fd;
+        border-radius: 6px;
+        padding: 0.75rem;
+        margin-top: 0.5rem;
+        border-left: 3px solid #2196f3;
+    }
+</style>
+
+<script>
+    let nerEntities = {{ ner_entities|default:"[]"|safe }} || [];
+    let allEntities = [...nerEntities];  // Keep unfiltered copy for search
+    let processedEntities = {};  // Store all 3-step processing results
+    let normalizedEntities = {};
+    let snomedMappings = {};
+    let selectedEntityIndex = null;
+    let isProcessing = false;
+    let selectedForProcessing = new Set();  // Track which entity indices are selected for processing
+
+    // Helper function to safely get CSRF token
+    function getCSRFToken() {
+        // Try meta tag first (most reliable, from base.html)
+        const metaTag = document.querySelector('meta[name="csrf-token"]');
+        if (metaTag) {
+            return metaTag.getAttribute('content');
+        }
+
+        // Fallback to form input
+        const csrfInput = document.querySelector('[name=csrfmiddlewaretoken]');
+        if (csrfInput) {
+            return csrfInput.value;
+        }
+
+        // Fallback to cookie
+        const cookieValue = document.cookie
+            .split('; ')
+            .find(row => row.startsWith('csrftoken='));
+        if (cookieValue) {
+            return cookieValue.split('=')[1];
+        }
+
+        console.error('CSRF token not found');
+        return null;
+    }
+
+    // Load existing MCN data if available
+    {% if existing_mcn %}
+    const existingData = {{ existing_mcn_json|safe }} || [];
+    // Match saved entities to current entities by text and position to handle filtering
+    existingData.forEach((savedEntity) => {
+        // Find the index in allEntities that matches this saved entity
+        const matchIndex = allEntities.findIndex(e =>
+            e.text === savedEntity.text &&
+            e.start === savedEntity.start &&
+            e.label === savedEntity.label
+        );
+
+        if (matchIndex >= 0) {
+            // Reconstruct complete processing data
+            processedEntities[matchIndex] = {
+                ...savedEntity,
+                step1_translation: savedEntity.translation || null,
+                step2_normalization: savedEntity.normalized_term ? {
+                    informal: savedEntity.original_term || savedEntity.text,
+                    formal: savedEntity.normalized_term,
+                    confidence: savedEntity.confidence || 0.85,
+                    reasoning: savedEntity.normalization_reasoning || ''
+                } : null,
+                step3_snomed_search: savedEntity.snomed_search_term ? {
+                    search_term: savedEntity.snomed_search_term
+                } : null,
+                snomed_best_match: savedEntity.snomed_concept || null,
+                processing_status: savedEntity.processing_status || 'completed'
+            };
+
+            if (savedEntity.normalized_term) {
+                normalizedEntities[matchIndex] = {
+                    normalized_term: savedEntity.normalized_term,
+                    original_term: savedEntity.text,
+                    confidence: savedEntity.confidence || 0.85,
+                    translation: savedEntity.translation || null,
+                    reasoning: savedEntity.normalization_reasoning || ''
+                };
+            }
+
+            if (savedEntity.snomed_concept) {
+                snomedMappings[matchIndex] = savedEntity.snomed_concept;
+            }
+        }
+    });
+    {% endif %}
+
+    document.addEventListener('DOMContentLoaded', function() {
+        // Initialize selection: select unmapped entities by default
+        initializeSelection();
+        displayDocument();
+        displayEntityList();
+        updateProgress();
+        updateSelectedCount();
+
+        // Update count when skip-mapped checkbox changes
+        document.getElementById('skipMappedCheckbox').addEventListener('change', updateSelectedCount);
+    });
+
+    function initializeSelection() {
+        // By default, select entities that are NOT already mapped
+        selectedForProcessing.clear();
+        allEntities.forEach((entity, index) => {
+            if (!snomedMappings[index]) {
+                selectedForProcessing.add(index);
+            }
+        });
+    }
+
+    function selectAllEntities() {
+        allEntities.forEach((entity, index) => {
+            selectedForProcessing.add(index);
+        });
+        displayEntityList();
+        updateSelectedCount();
+    }
+
+    function selectNoneEntities() {
+        selectedForProcessing.clear();
+        displayEntityList();
+        updateSelectedCount();
+    }
+
+    function selectUnmappedEntities() {
+        selectedForProcessing.clear();
+        allEntities.forEach((entity, index) => {
+            if (!snomedMappings[index]) {
+                selectedForProcessing.add(index);
+            }
+        });
+        displayEntityList();
+        updateSelectedCount();
+    }
+
+    function toggleEntitySelection(index) {
+        if (selectedForProcessing.has(index)) {
+            selectedForProcessing.delete(index);
+        } else {
+            selectedForProcessing.add(index);
+        }
+        updateSelectedCount();
+    }
+
+    function updateSelectedCount() {
+        const skipMapped = document.getElementById('skipMappedCheckbox').checked;
+        let effectiveCount = 0;
+        selectedForProcessing.forEach(index => {
+            if (skipMapped && snomedMappings[index]) return;
+            effectiveCount++;
+        });
+        document.getElementById('selectedCountBadge').textContent = selectedForProcessing.size + ' selected';
+        document.getElementById('processBtnCount').textContent = effectiveCount;
+    }
+
+    function resolveOverlaps(entities) {
+        if (!entities || entities.length === 0) return [];
+
+        const normalized = entities.map((e, idx) => ({
+            start: e.start || 0,
+            end: e.end || 0,
+            label: e.label || 'UNKNOWN',
+            text: e.text || '',
+            originalIndex: idx
+        })).filter(e => e.end > e.start);
+
+        // Sort by start ascending, then by span length descending (prefer longer)
+        normalized.sort((a, b) => a.start - b.start || (b.end - b.start) - (a.end - a.start));
+
+        // Remove overlaps: keep earlier/longer entities
+        const result = [];
+        let lastEnd = 0;
+        for (const entity of normalized) {
+            if (entity.start >= lastEnd) {
+                result.push(entity);
+                lastEnd = entity.end;
+            }
+        }
+        return result;
+    }
+
+    function escapeHtmlText(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    function displayDocument() {
+        const documentText = document.getElementById('documentText');
+        const text = `{{ document.content|escapejs }}`;
+
+        const resolved = resolveOverlaps(nerEntities);
+        let result = '';
+        let lastIndex = 0;
+
+        resolved.forEach(entity => {
+            const start = Math.max(0, Math.min(entity.start, text.length));
+            const end = Math.max(start, Math.min(entity.end, text.length));
+
+            // Escape text before this entity
+            if (start > lastIndex) {
+                result += escapeHtmlText(text.substring(lastIndex, start));
+            }
+
+            const entityText = escapeHtmlText(text.substring(start, end));
+            const escapedTitle = escapeHtmlText(`${entity.label}: ${entity.text}`);
+            result += `<span class="ner-entity entity-${entity.label}"
+                             data-entity-index="${entity.originalIndex}"
+                             onclick="openEntityDetails(${entity.originalIndex})"
+                             title="${escapedTitle}">${entityText}</span>`;
+
+            lastIndex = end;
+        });
+
+        // Remaining text
+        if (lastIndex < text.length) {
+            result += escapeHtmlText(text.substring(lastIndex));
+        }
+
+        documentText.innerHTML = result;
+    }
+
+    function filterEntities() {
+        const searchInput = document.getElementById('entitySearchInput');
+        const searchTerm = searchInput.value.toLowerCase().trim();
+
+        if (searchTerm === '') {
+            nerEntities = [...allEntities];
+            displayEntityList();
+            document.getElementById('filteredCount').textContent = allEntities.length;
+            return;
+        }
+
+        nerEntities = allEntities.filter(entity => {
+            const textMatch = entity.text.toLowerCase().includes(searchTerm);
+            const labelMatch = entity.label.toLowerCase().includes(searchTerm);
+            return textMatch || labelMatch;
+        });
+
+        displayEntityList();
+        document.getElementById('filteredCount').textContent = nerEntities.length;
+    }
+
+    function displayEntityList(filteredEntities = null) {
+        const entityList = document.getElementById('entityList');
+        const entitiesToDisplay = filteredEntities || nerEntities;
+
+        if (entitiesToDisplay.length === 0) {
+            entityList.innerHTML = '<div class="text-center text-muted">No entities found.</div>';
+            return;
+        }
+
+        let html = '';
+        entitiesToDisplay.forEach((entity, displayIndex) => {
+            // Find actual index in allEntities
+            const index = allEntities.findIndex(e => e.start === entity.start && e.text === entity.text);
+            const isNormalized = normalizedEntities[index] !== undefined;
+            const isMapped = snomedMappings[index] !== undefined;
+            const normalization = normalizedEntities[index];
+            const mapping = snomedMappings[index];
+            const isSelected = selectedForProcessing.has(index);
+
+            let statusClass = 'not-started';
+            let statusBadge = '<span class="badge bg-secondary">Not Started</span>';
+
+            if (isNormalized && isMapped) {
+                statusClass = 'completed';
+                statusBadge = '<span class="badge bg-success"><i class="fas fa-check me-1"></i>Mapped</span>';
+            } else if (isNormalized) {
+                statusClass = 'mapping';
+                statusBadge = '<span class="badge bg-info">Ready for Mapping</span>';
+            }
+
+            html += `
+                <div class="entity-item ${statusClass} ${isSelected ? 'entity-selected' : ''}" data-entity-index="${index}">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div class="form-check me-2 mt-1">
+                            <input class="form-check-input entity-select-checkbox" type="checkbox"
+                                   id="entityCheck_${index}"
+                                   ${isSelected ? 'checked' : ''}
+                                   onchange="toggleEntitySelection(${index})"
+                                   title="${isMapped ? 'Already mapped - will be skipped unless unchecked \"Skip already mapped\"' : 'Select for processing'}">
+                        </div>
+                        <div class="flex-grow-1">
+                            <div class="d-flex align-items-center mb-2">
+                                <strong class="me-2">"${entity.text}"</strong>
+                                <span class="badge entity-badge entity-${entity.label}">${entity.label}</span>
+                                ${statusBadge}
+                            </div>
+
+                            ${isNormalized ? `
+                                <div class="normalization-result">
+                                    <div class="small"><strong>AI Normalized:</strong> "${normalization.normalized_term}"</div>
+                                    <div class="small text-muted">Confidence: ${Math.round(normalization.confidence * 100)}%</div>
+                                </div>
+                            ` : ''}
+
+                            ${isMapped ? `
+                                <div class="snomed-mapping">
+                                    <div class="small"><strong>SNOMED-CT:</strong> ${mapping.term || mapping.preferredTerm}</div>
+                                    <div class="small text-muted">ID: ${mapping.conceptId}</div>
+                                </div>
+                            ` : ''}
+                        </div>
+                        <div class="btn-group-vertical btn-group-sm">
+                            <button class="btn btn-outline-primary btn-sm" onclick="openEntityDetails(${index})" title="Review Details">
+                                👁️
+                            </button>
+                            ${isNormalized || isMapped ? `<button class="btn btn-outline-danger btn-sm" onclick="resetEntity(${index})" title="Reset">↺</button>` : ''}
+                        </div>
+                    </div>
+                </div>
+            `;
+        });
+
+        entityList.innerHTML = html;
+        document.getElementById('totalEntities').textContent = nerEntities.length;
+        updateSelectedCount();
+    }
+
+    function processSelectedEntities() {
+        if (isProcessing) return;
+
+        const skipMapped = document.getElementById('skipMappedCheckbox').checked;
+
+        // Build list of entities to process (selected + optionally skip mapped)
+        const entitiesToProcess = [];
+        const indexMapping = [];  // Maps response index -> allEntities index
+
+        allEntities.forEach((entity, index) => {
+            if (!selectedForProcessing.has(index)) return;  // Not selected
+            if (skipMapped && snomedMappings[index]) return;  // Already mapped, skip
+            entitiesToProcess.push(entity);
+            indexMapping.push(index);
+        });
+
+        if (entitiesToProcess.length === 0) {
+            const skippedCount = [...selectedForProcessing].filter(i => snomedMappings[i]).length;
+            if (skippedCount > 0) {
+                showToast(`All ${skippedCount} selected entities are already mapped. Uncheck "Skip already mapped" to re-process them, or select unmapped entities.`, 'warning');
+            } else {
+                showToast('No entities selected for processing. Use the checkboxes to select entities.', 'warning');
+            }
+            return;
+        }
+
+        const csrfToken = getCSRFToken();
+        if (!csrfToken) {
+            alert('Security token not found. Please refresh the page.');
+            return;
+        }
+
+        const skippedCount = [...selectedForProcessing].filter(i => snomedMappings[i]).length;
+
+        isProcessing = true;
+        const processBtn = document.getElementById('processBtn');
+        processBtn.disabled = true;
+        processBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Processing ' + entitiesToProcess.length + ' entities...';
+
+        // Show step indicator
+        const stepIndicator = document.getElementById('stepIndicator');
+        const stepMessage = document.getElementById('stepMessage');
+        stepIndicator.style.display = 'block';
+        let skipNote = skipMapped && skippedCount > 0 ? ` (${skippedCount} already mapped - skipped)` : '';
+        stepMessage.innerHTML = `<i class="fas fa-spinner fa-spin me-1"></i>Processing ${entitiesToProcess.length} of ${allEntities.length} entities${skipNote}...`;
+
+        // Call 3-step translation API with retry logic
+        const maxRetries = 2;
+        const fetchWithRetry = async (attempt = 0) => {
+            // Timeout: 120s to allow parallel processing of all entities
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 120000);
+
+            let response;
+            try {
+                response = await fetch('{% url "annotation:translate_indonesian_entities" %}', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': csrfToken
+                    },
+                    body: JSON.stringify({
+                        entities: entitiesToProcess,
+                        context: `{{ document.content|escapejs }}`.substring(0, 500),
+                        step: 'all'
+                    }),
+                    signal: controller.signal
+                });
+            } catch (fetchError) {
+                clearTimeout(timeoutId);
+                if (fetchError.name === 'AbortError') {
+                    throw new Error('Request timed out after 120 seconds. Try processing fewer entities at a time.');
+                }
+                throw fetchError;
+            }
+            clearTimeout(timeoutId);
+
+            // Check if response is JSON before parsing
+            const contentType = response.headers.get('content-type') || '';
+            if (!contentType.includes('application/json')) {
+                const text = await response.text();
+                if (text.includes('<html') || text.includes('<!DOCTYPE')) {
+                    if (response.redirected || text.includes('login')) {
+                        throw new Error('Session expired. Please refresh the page and log in again.');
+                    }
+                    throw new Error(`Server returned HTML instead of JSON (HTTP ${response.status}). The LLM service may be temporarily unavailable - please try again.`);
+                }
+                throw new Error(`Unexpected response format (HTTP ${response.status})`);
+            }
+
+            const data = await response.json();
+
+            // If backend reported a transient LLM error, retry
+            if (!data.success && attempt < maxRetries && data.error &&
+                (data.error.includes('500') || data.error.includes('503') || data.error.includes('rate') || data.error.includes('quota'))) {
+                const delay = (attempt + 1) * 3000;
+                stepMessage.innerHTML = `<i class="fas fa-redo fa-spin me-1"></i> LLM service busy, retrying in ${delay/1000}s... (attempt ${attempt + 2}/${maxRetries + 1})`;
+                await new Promise(resolve => setTimeout(resolve, delay));
+                return fetchWithRetry(attempt + 1);
+            }
+
+            return data;
+        };
+
+        fetchWithRetry()
+        .then(data => {
+            if (data.success) {
+                // Map response entities back to their correct allEntities indices
+                data.entities.forEach((entity, responseIndex) => {
+                    const originalIndex = indexMapping[responseIndex];
+
+                    // Store complete 3-step processing data
+                    processedEntities[originalIndex] = entity;
+
+                    // Extract normalization (Step 2 result)
+                    if (entity.step2_normalization) {
+                        normalizedEntities[originalIndex] = {
+                            normalized_term: entity.step2_normalization.formal,
+                            original_term: entity.text,
+                            confidence: entity.step2_normalization.confidence || 0.0,
+                            translation: entity.step1_translation,
+                            reasoning: entity.step2_normalization.reasoning
+                        };
+                    }
+
+                    // Extract SNOMED mapping (Step 3 result + lookup)
+                    if (entity.snomed_best_match) {
+                        snomedMappings[originalIndex] = entity.snomed_best_match;
+                    }
+                });
+
+                displayEntityList();
+                updateProgress();
+
+                const stats = data.statistics;
+                const translationRate = Math.round(stats.translation_rate || 0);
+                const mappingRate = Math.round(stats.mapping_rate || 0);
+                const totalMapped = Object.keys(snomedMappings).length;
+
+                stepMessage.innerHTML = `
+                    ✅ Processing Complete!<br>
+                    <small>
+                        📊 Processed: ${entitiesToProcess.length} entities${skipNote}<br>
+                        📝 Translated: ${stats.successfully_translated}/${stats.total_entities} (${translationRate}%)<br>
+                        🔍 Newly Mapped: ${stats.successfully_mapped}/${stats.total_entities} (${mappingRate}%)<br>
+                        📋 Total Mapped: ${totalMapped}/${allEntities.length} overall
+                    </small>
+                `;
+
+                if (mappingRate > 50) {
+                    showToast(`Success! ${stats.successfully_mapped} new mappings. Total: ${totalMapped}/${allEntities.length} mapped. Review and save.`, 'success');
+                } else if (translationRate > 70) {
+                    showToast(`Translation complete (${translationRate}%), but only ${mappingRate}% mapped to SNOMED. Review results and use manual search if needed.`, 'warning');
+                } else {
+                    showToast(`Processing complete. Translation: ${translationRate}%, Mapping: ${mappingRate}%. Review results carefully.`, 'info');
+                }
+            } else {
+                stepMessage.textContent = '❌ Processing failed: ' + data.error;
+                showToast('3-step processing failed: ' + data.error, 'error');
+            }
+        })
+        .catch(error => {
+            console.error('3-step processing error:', error);
+            stepMessage.textContent = '❌ Error occurred during processing: ' + error.message;
+            showToast('Processing failed: ' + error.message + '. Please check server logs for details.', 'error');
+        })
+        .finally(() => {
+            isProcessing = false;
+            processBtn.disabled = false;
+            processBtn.innerHTML = '<i class="fas fa-magic me-2"></i>🚀 Process Selected (<span id="processBtnCount">' + entitiesToProcess.length + '</span>)';
+            updateSelectedCount();
+        });
+    }
+
+    function searchSnomedForEntity(entityIndex, searchTerm) {
+        const csrfToken = getCSRFToken();
+        if (!csrfToken) {
+            console.error('CSRF token not found');
+            return Promise.reject(new Error('CSRF token not found'));
+        }
+
+        return fetch('{% url "annotation:search_snomed" %}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrfToken
+            },
+            body: JSON.stringify({
+                term: searchTerm,
+                max_results: 1  // Just get the best match
+            })
+        })
+        .then(response => {
+            const ct = response.headers.get('content-type') || '';
+            if (!ct.includes('application/json')) {
+                throw new Error('SNOMED search returned non-JSON response');
+            }
+            return response.json();
+        })
+        .then(data => {
+            if (data.success && data.candidates.length > 0) {
+                // Automatically select the best match
+                snomedMappings[entityIndex] = data.candidates[0];
+            }
+            return data;
+        });
+    }
+
+    function searchCustomSnomed() {
+        if (selectedEntityIndex === null) {
+            showToast('No entity selected', 'error');
+            return;
+        }
+
+        const customTerm = document.getElementById('customNormalization').value.trim();
+        if (!customTerm) {
+            showToast('Please enter a search term', 'warning');
+            return;
+        }
+
+        const csrfToken = getCSRFToken();
+        if (!csrfToken) {
+            showToast('Security token not found. Please refresh the page.', 'error');
+            return;
+        }
+
+        // Show loading state
+        const snomedMappingInfo = document.getElementById('snomedMappingInfo');
+        snomedMappingInfo.innerHTML = `
+            <div class="text-center">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Searching...</span>
+                </div>
+                <p class="mt-2 text-muted">Searching SNOMED-CT for "${customTerm}"...</p>
+            </div>
+        `;
+
+        fetch('{% url "annotation:search_snomed" %}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrfToken
+            },
+            body: JSON.stringify({
+                term: customTerm,
+                max_results: 5
+            })
+        })
+        .then(response => {
+            const ct = response.headers.get('content-type') || '';
+            if (!ct.includes('application/json')) {
+                throw new Error('SNOMED search returned non-JSON response. Please try again.');
+            }
+            return response.json();
+        })
+        .then(data => {
+            if (data.success && data.candidates.length > 0) {
+                // Display search results for user to select
+                let resultsHtml = '<h6 class="mb-3">Select a SNOMED-CT Concept:</h6>';
+                data.candidates.forEach((candidate, index) => {
+                    const term = candidate.term || candidate.preferredTerm || 'Unknown term';
+                    resultsHtml += `
+                        <div class="border rounded p-2 mb-2 cursor-pointer hover-bg" style="cursor: pointer;"
+                             onclick="selectCustomSnomed(${index})">
+                            <div class="fw-bold">${term}</div>
+                            <div class="small text-muted">ID: ${candidate.conceptId}</div>
+                            ${candidate.fsn ? `<div class="small text-secondary">${candidate.fsn}</div>` : ''}
+                        </div>
+                    `;
+                });
+                snomedMappingInfo.innerHTML = resultsHtml;
+
+                // Store results for selection
+                window.customSnomedResults = data.candidates;
+            } else {
+                snomedMappingInfo.innerHTML = `
+                    <div class="alert alert-warning">
+                        <i class="fas fa-exclamation-triangle me-2"></i>
+                        No SNOMED-CT concepts found for "${customTerm}". Try a different search term.
+                    </div>
+                `;
+            }
+        })
+        .catch(error => {
+            console.error('SNOMED search error:', error);
+            snomedMappingInfo.innerHTML = `
+                <div class="alert alert-danger">
+                    <i class="fas fa-times-circle me-2"></i>
+                    Search failed. Please try again.
+                </div>
+            `;
+        });
+    }
+
+    function selectCustomSnomed(index) {
+        if (!window.customSnomedResults || !window.customSnomedResults[index]) {
+            showToast('Invalid selection', 'error');
+            return;
+        }
+
+        const selectedConcept = window.customSnomedResults[index];
+
+        // Update the mapping for the current entity
+        snomedMappings[selectedEntityIndex] = selectedConcept;
+
+        // Update normalization with custom term if needed
+        const customTerm = document.getElementById('customNormalization').value.trim();
+        if (customTerm) {
+            normalizedEntities[selectedEntityIndex] = {
+                normalized_term: customTerm,
+                original_term: allEntities[selectedEntityIndex].text,
+                confidence: 1.0
+            };
+        }
+
+        // Update display
+        const term = selectedConcept.term || selectedConcept.preferredTerm;
+        document.getElementById('snomedMappingInfo').innerHTML = `
+            <div class="alert alert-success">
+                <i class="fas fa-check-circle me-2"></i>
+                <strong>Selected:</strong> ${term}<br>
+                <strong>ID:</strong> ${selectedConcept.conceptId}
+            </div>
+        `;
+
+        showToast(`Mapped to: ${term}`, 'success');
+
+        // Update the entity list display
+        displayEntityList();
+        updateProgress();
+    }
+
+    function openEntityDetails(entityIndex) {
+        selectedEntityIndex = entityIndex;
+        const entity = allEntities[entityIndex];
+        const processed = processedEntities[entityIndex];
+        const normalization = normalizedEntities[entityIndex];
+        const mapping = snomedMappings[entityIndex];
+
+        // Original entity
+        document.getElementById('modalEntityText').textContent = entity.text;
+        document.getElementById('modalEntityType').textContent = entity.label;
+        document.getElementById('modalEntityType').className = `badge entity-badge entity-${entity.label}`;
+
+        // Step 1: Translation
+        const translationDiv = document.getElementById('modalTranslation');
+        if (processed && processed.step1_translation) {
+            const trans = processed.step1_translation;
+            document.getElementById('modalIndonesian').textContent = trans.original;
+            document.getElementById('modalEnglish').textContent = trans.english;
+            document.getElementById('modalTranslationConfidence').textContent = Math.round(trans.confidence * 100) + '%';
+            document.getElementById('modalTranslationNotes').textContent = trans.notes || '';
+            if (trans.is_already_english) {
+                translationDiv.classList.add('border-info');
+                document.getElementById('modalTranslationNotes').textContent = '✓ Already in English';
+            }
+        } else {
+            document.getElementById('modalIndonesian').textContent = entity.text;
+            document.getElementById('modalEnglish').textContent = 'Not translated yet';
+            document.getElementById('modalTranslationConfidence').textContent = 'N/A';
+            document.getElementById('modalTranslationNotes').textContent = '';
+        }
+
+        // Step 2: Normalization
+        if (processed && processed.step2_normalization) {
+            const norm = processed.step2_normalization;
+            document.getElementById('modalInformal').textContent = norm.informal;
+            document.getElementById('modalFormal').textContent = norm.formal;
+            document.getElementById('modalNormalizationConfidence').textContent = Math.round(norm.confidence * 100) + '%';
+            document.getElementById('modalNormalizationReasoning').textContent = norm.reasoning || '';
+            document.getElementById('customNormalization').value = norm.formal;
+        } else if (normalization) {
+            document.getElementById('modalInformal').textContent = normalization.original_term;
+            document.getElementById('modalFormal').textContent = normalization.normalized_term;
+            document.getElementById('modalNormalizationConfidence').textContent = Math.round(normalization.confidence * 100) + '%';
+            document.getElementById('modalNormalizationReasoning').textContent = normalization.reasoning || '';
+            document.getElementById('customNormalization').value = normalization.normalized_term;
+        } else {
+            document.getElementById('modalInformal').textContent = entity.text;
+            document.getElementById('modalFormal').textContent = 'Not normalized yet';
+            document.getElementById('modalNormalizationConfidence').textContent = 'N/A';
+            document.getElementById('modalNormalizationReasoning').textContent = '';
+            document.getElementById('customNormalization').value = '';
+        }
+
+        // Step 3: SNOMED Mapping
+        if (mapping) {
+            document.getElementById('snomedMappingInfo').innerHTML = `
+                <div><strong>Term:</strong> ${mapping.term || mapping.preferredTerm}</div>
+                <div><strong>Concept ID:</strong> ${mapping.conceptId}</div>
+                ${mapping.fsn ? `<div><strong>FSN:</strong> ${mapping.fsn}</div>` : ''}
+                ${processed && processed.step3_snomed_search ?
+                    `<div class="mt-2"><small class="text-muted">Search term used: "${processed.step3_snomed_search.search_term}"</small></div>` : ''}
+            `;
+        } else {
+            document.getElementById('snomedMappingInfo').innerHTML = `
+                <div class="text-center text-muted">
+                    <i class="fas fa-search fa-2x mb-3"></i>
+                    <p>No SNOMED-CT mapping found</p>
+                    ${processed && processed.step3_snomed_search ?
+                        `<small>Searched for: "${processed.step3_snomed_search.search_term}"</small>` : ''}
+                </div>
+            `;
+        }
+
+        const modal = new bootstrap.Modal(document.getElementById('entityModal'));
+        modal.show();
+    }
+
+    function acceptEntityChanges() {
+        const customTerm = document.getElementById('customNormalization').value.trim();
+
+        if (customTerm && selectedEntityIndex !== null) {
+            // Update normalization with custom term
+            normalizedEntities[selectedEntityIndex] = {
+                normalized_term: customTerm,
+                original_term: allEntities[selectedEntityIndex].text,
+                confidence: 1.0  // User override gets max confidence
+            };
+
+            displayEntityList();
+            updateProgress();
+        }
+
+        bootstrap.Modal.getInstance(document.getElementById('entityModal')).hide();
+    }
+
+    function resetEntity(entityIndex) {
+        if (confirm('Reset this entity\'s normalization and mapping?')) {
+            delete normalizedEntities[entityIndex];
+            delete snomedMappings[entityIndex];
+            delete processedEntities[entityIndex];
+            // Auto-select it for re-processing
+            selectedForProcessing.add(entityIndex);
+            displayEntityList();
+            updateProgress();
+        }
+    }
+
+    function resetAll() {
+        if (confirm('Reset all normalizations and mappings?')) {
+            normalizedEntities = {};
+            snomedMappings = {};
+            processedEntities = {};
+            // Re-select all for processing
+            selectAllEntities();
+            displayEntityList();
+            updateProgress();
+        }
+    }
+
+    function updateProgress() {
+        const totalEntities = allEntities.length;
+        const translatedCount = Object.values(processedEntities).filter(e => e.step1_translation).length;
+        const normalizedCount = Object.keys(normalizedEntities).length;
+        const mappedCount = Object.keys(snomedMappings).length;
+
+        // Update counters
+        document.getElementById('normalizedCount').textContent = normalizedCount;
+        document.getElementById('mappedCount').textContent = mappedCount;
+        document.getElementById('translatedCounter').textContent = translatedCount;
+        document.getElementById('totalTranslationCounter').textContent = totalEntities;
+        document.getElementById('normalizedCounter').textContent = normalizedCount;
+        document.getElementById('totalCounter').textContent = totalEntities;
+        document.getElementById('mappedCounter').textContent = mappedCount;
+        document.getElementById('totalMappingCounter').textContent = totalEntities;
+
+        // Update progress bars
+        const translationPercent = totalEntities > 0 ? (translatedCount / totalEntities) * 100 : 0;
+        const normalizationPercent = totalEntities > 0 ? (normalizedCount / totalEntities) * 100 : 0;
+        const mappingPercent = totalEntities > 0 ? (mappedCount / totalEntities) * 100 : 0;
+
+        document.getElementById('translationProgress').style.width = translationPercent + '%';
+        document.getElementById('normalizationProgress').style.width = normalizationPercent + '%';
+        document.getElementById('mappingProgress').style.width = mappingPercent + '%';
+    }
+
+    function saveMCN() {
+        const csrfToken = getCSRFToken();
+        if (!csrfToken) {
+            showToast('Security token not found. Please refresh the page.', 'error');
+            return;
+        }
+
+        // Create final entities with all 3-step data
+        const finalEntities = allEntities.map((entity, index) => {
+            const processed = processedEntities[index];
+            const normalization = normalizedEntities[index];
+            const mapping = snomedMappings[index];
+
+            // Determine MCN status based on LLM suggestion vs final mapping
+            let mcnStatus = 'pending';
+            if (mapping) {
+                // Check if the annotator changed the LLM's SNOMED suggestion
+                const llmSnomedMatch = processed && processed.snomed_best_match;
+                if (llmSnomedMatch && mapping.conceptId === llmSnomedMatch.conceptId) {
+                    mcnStatus = 'accepted';  // Kept LLM suggestion
+                } else if (llmSnomedMatch) {
+                    mcnStatus = 'modified';  // Changed to different SNOMED term
+                } else {
+                    mcnStatus = 'accepted';  // No LLM suggestion existed, annotator mapped manually
+                }
+            }
+
+            return {
+                ...entity,
+                // Keep original text
+                original_term: entity.text,
+
+                // Step 1: Translation data
+                translation: processed ? processed.step1_translation : null,
+
+                // Step 2: Normalization data
+                normalized_term: normalization ? normalization.normalized_term : entity.text,
+                confidence: normalization ? normalization.confidence : 1.0,
+                normalization_reasoning: normalization ? normalization.reasoning : null,
+
+                // Step 3: SNOMED mapping
+                snomed_concept: mapping || null,
+                is_mapped: mapping !== undefined,
+                snomed_search_term: processed && processed.step3_snomed_search ? processed.step3_snomed_search.search_term : null,
+
+                // MCN tracking fields
+                mcn_source: 'llm',
+                mcn_status: mcnStatus,
+
+                // Metadata
+                normalization_source: 'gemini-2.5-flash',
+                workflow: '3-step-indonesian-mcn',
+                processing_status: processed ? processed.processing_status : 'not_processed'
+            };
+        });
+
+        fetch('{% url "annotation:mcn_llm_assisted" document.id %}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrfToken
+            },
+            body: JSON.stringify({
+                entities: finalEntities
+            })
+        })
+        .then(response => {
+            if (!response.ok) throw new Error('Server returned ' + response.status);
+            const ct = response.headers.get('content-type') || '';
+            if (!ct.includes('application/json')) {
+                throw new Error('Server returned non-JSON response. Please refresh and try again.');
+            }
+            return response.json();
+        })
+        .then(data => {
+            if (data.success) {
+                const g = data.gamification;
+                if (g && !g.is_status_only) {
+                    // Fresh points earned
+                    showGamificationToast(data);
+                    setTimeout(() => {
+                        window.location.href = '{% url "annotation:annotator_documents" %}';
+                    }, 3000);
+                } else {
+                    const statusSuffix = (g && g.is_status_only) ? ' | ' + g.new_total + ' pts (Level ' + g.level + ')' : '';
+                    showToast('LLM-assisted MCN saved successfully!' + statusSuffix, 'success');
+                    setTimeout(() => {
+                        window.location.href = '{% url "annotation:annotator_documents" %}';
+                    }, 1500);
+                }
+            } else {
+                showToast('Error: ' + data.error, 'error');
+            }
+        })
+        .catch(error => {
+            console.error('Save error:', error);
+            showToast('An error occurred while saving MCN results: ' + error.message, 'error');
+        });
+    }
+
+    function showToast(message, type = 'info') {
+        // Simple toast notification
+        const toast = document.createElement('div');
+        toast.className = `alert alert-${type === 'error' ? 'danger' : type === 'warning' ? 'warning' : type === 'success' ? 'success' : 'info'} position-fixed`;
+        toast.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 300px;';
+        toast.innerHTML = `
+            ${message}
+            <button type="button" class="btn-close float-end" onclick="this.parentElement.remove()"></button>
+        `;
+        document.body.appendChild(toast);
+
+        setTimeout(() => toast.remove(), 5000);
+    }
+</script>
+{% endblock %}
+
+{% block extra_js %}
+<!-- CSRF Token for AJAX -->
+<input type="hidden" name="csrfmiddlewaretoken" value="{{ csrf_token }}">
+{% endblock %}

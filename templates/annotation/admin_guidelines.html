@@ -1,0 +1,249 @@
+{% extends 'base.html' %}
+
+{% block title %}Guidelines Management - AnnoHID{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h2 class="mb-0">📋 Guidelines Management</h2>
+            <div class="btn-group" role="group">
+                <a href="{% url 'annotation:upload_guideline' %}" class="btn btn-primary">
+                    ➕ Upload New Guideline
+                </a>
+                <a href="{% url 'annotation:view_guidelines' %}" class="btn btn-outline-info">
+                    👁️ View as Annotator
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Statistics -->
+<div class="row mb-4">
+    <div class="col-md-6">
+        <div class="card bg-primary text-white text-center">
+            <div class="card-body">
+                <h3 class="card-title">{{ total_guidelines }}</h3>
+                <p class="card-text">Total Guidelines</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card bg-success text-white text-center">
+            <div class="card-body">
+                <h3 class="card-title">{{ active_guidelines }}</h3>
+                <p class="card-text">Active Guidelines</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Guidelines List -->
+<div class="card">
+    <div class="card-header">
+        <h5 class="card-title mb-0">All Guidelines</h5>
+    </div>
+    <div class="card-body">
+        {% if page_obj %}
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>Title</th>
+                            <th>Description</th>
+                            <th>Status</th>
+                            <th>Uploaded By</th>
+                            <th>Created</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for guideline in page_obj %}
+                        <tr>
+                            <td>
+                                <strong>{{ guideline.title }}</strong>
+                            </td>
+                            <td>
+                                {% if guideline.description %}
+                                    {{ guideline.description|truncatechars:100 }}
+                                {% else %}
+                                    <span class="text-muted">No description</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if guideline.is_active %}
+                                    <span class="badge bg-success">Active</span>
+                                {% else %}
+                                    <span class="badge bg-secondary">Inactive</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ guideline.uploaded_by.username }}</td>
+                            <td>{{ guideline.created_at|date:"M d, Y" }}</td>
+                            <td>
+                                <div class="btn-group btn-group-sm" role="group">
+                                    <a href="{% url 'annotation:guideline_detail' guideline.id %}"
+                                       class="btn btn-outline-primary" title="View">
+                                        👁️
+                                    </a>
+                                    <a href="{% url 'annotation:edit_guideline' guideline.id %}"
+                                       class="btn btn-outline-success" title="Edit">
+                                        ✏️
+                                    </a>
+                                    <button class="btn btn-outline-warning"
+                                            onclick="toggleGuidelineStatus({{ guideline.id }})"
+                                            title="Toggle Status">
+                                        {% if guideline.is_active %}⏸️{% else %}▶️{% endif %}
+                                    </button>
+                                    <button class="btn btn-outline-danger"
+                                            onclick="deleteGuideline({{ guideline.id }}, '{{ guideline.title|escapejs }}')"
+                                            title="Delete">
+                                        🗑️
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Pagination -->
+            {% if page_obj.has_other_pages %}
+            <nav aria-label="Guidelines pagination">
+                <ul class="pagination justify-content-center">
+                    {% if page_obj.has_previous %}
+                        <li class="page-item">
+                            <a class="page-link" href="?page=1">First</a>
+                        </li>
+                        <li class="page-item">
+                            <a class="page-link" href="?page={{ page_obj.previous_page_number }}">Previous</a>
+                        </li>
+                    {% endif %}
+
+                    {% for num in page_obj.paginator.page_range %}
+                        {% if page_obj.number == num %}
+                            <li class="page-item active">
+                                <span class="page-link">{{ num }}</span>
+                            </li>
+                        {% elif num > page_obj.number|add:'-3' and num < page_obj.number|add:'3' %}
+                            <li class="page-item">
+                                <a class="page-link" href="?page={{ num }}">{{ num }}</a>
+                            </li>
+                        {% endif %}
+                    {% endfor %}
+
+                    {% if page_obj.has_next %}
+                        <li class="page-item">
+                            <a class="page-link" href="?page={{ page_obj.next_page_number }}">Next</a>
+                        </li>
+                        <li class="page-item">
+                            <a class="page-link" href="?page={{ page_obj.paginator.num_pages }}">Last</a>
+                        </li>
+                    {% endif %}
+                </ul>
+            </nav>
+            {% endif %}
+        {% else %}
+            <div class="text-center py-5">
+                <div class="mb-3">
+                    <i class="display-1">📋</i>
+                </div>
+                <h5 class="text-muted">No guidelines uploaded yet</h5>
+                <p class="text-muted">Upload your first annotation guideline to get started.</p>
+                <a href="{% url 'annotation:upload_guideline' %}" class="btn btn-primary">
+                    ➕ Upload First Guideline
+                </a>
+            </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function toggleGuidelineStatus(guidelineId) {
+    if (confirm('Are you sure you want to toggle the status of this guideline?')) {
+        fetch(`/annotation/admin/guidelines/${guidelineId}/toggle-status/`, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': getCookie('csrftoken'),
+                'Content-Type': 'application/json',
+            },
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showAlert(data.message, 'success');
+                setTimeout(() => location.reload(), 1000);
+            } else {
+                showAlert(data.error, 'danger');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            showAlert('Failed to update guideline status', 'danger');
+        });
+    }
+}
+
+function deleteGuideline(guidelineId, guidelineTitle) {
+    if (confirm(`Are you sure you want to delete the guideline "${guidelineTitle}"? This action cannot be undone.`)) {
+        fetch(`/annotation/admin/guidelines/${guidelineId}/delete/`, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': getCookie('csrftoken'),
+                'Content-Type': 'application/json',
+            },
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showAlert(data.message, 'success');
+                setTimeout(() => location.reload(), 1000);
+            } else {
+                showAlert(data.error, 'danger');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            showAlert('Failed to delete guideline', 'danger');
+        });
+    }
+}
+
+function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+        const cookies = document.cookie.split(';');
+        for (let i = 0; i < cookies.length; i++) {
+            const cookie = cookies[i].trim();
+            if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                break;
+            }
+        }
+    }
+    return cookieValue;
+}
+
+function showAlert(message, type) {
+    const alertDiv = document.createElement('div');
+    alertDiv.className = `alert alert-${type} alert-dismissible fade show position-fixed`;
+    alertDiv.style.top = '20px';
+    alertDiv.style.right = '20px';
+    alertDiv.style.zIndex = '9999';
+    alertDiv.innerHTML = `
+        ${message}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    `;
+    document.body.appendChild(alertDiv);
+
+    setTimeout(() => {
+        if (alertDiv.parentNode) {
+            alertDiv.parentNode.removeChild(alertDiv);
+        }
+    }, 5000);
+}
+</script>
+{% endblock %}

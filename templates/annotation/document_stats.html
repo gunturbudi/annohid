@@ -1,0 +1,149 @@
+{% extends 'base.html' %}
+
+{% block title %}Document Statistics - {{ document.title|default:"Document" }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- Header -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a href="{% url 'annotation:admin_statistics_dashboard' %}">Statistics Dashboard</a></li>
+                    <li class="breadcrumb-item active">Document #{{ document.id }}</li>
+                </ol>
+            </nav>
+            <h1 class="h3 mb-0">📄 Document Statistics</h1>
+            <p class="text-muted">{{ document.title|default:"Untitled Document" }}</p>
+        </div>
+    </div>
+
+    <!-- Document Content -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">Document Content</h5>
+                </div>
+                <div class="card-body">
+                    <p class="mb-2"><strong>Word Count:</strong> {{ document.word_count }}</p>
+                    <p class="mb-3"><strong>Character Count:</strong> {{ document.character_count }}</p>
+                    <div class="border p-3 bg-light rounded">
+                        {{ document.content }}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Overall Statistics -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card text-center">
+                <div class="card-body">
+                    <h3 class="text-primary">{{ doc_stats.total_annotations }}</h3>
+                    <p class="text-muted mb-0">Total Annotations</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center">
+                <div class="card-body">
+                    <h3 class="text-success">{{ doc_stats.avg_time_minutes|floatformat:1 }}</h3>
+                    <p class="text-muted mb-0">Avg Time (min)</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center">
+                <div class="card-body">
+                    <h3 class="text-info">{{ doc_stats.min_time_minutes|floatformat:1 }}</h3>
+                    <p class="text-muted mb-0">Min Time (min)</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center">
+                <div class="card-body">
+                    <h3 class="text-warning">{{ doc_stats.max_time_minutes|floatformat:1 }}</h3>
+                    <p class="text-muted mb-0">Max Time (min)</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Annotator Breakdown -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">👥 Annotation Breakdown by Annotator</h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Annotator</th>
+                                    <th>Task Type</th>
+                                    <th>Duration (min)</th>
+                                    <th>Entities Found</th>
+                                    <th>Entity Breakdown</th>
+                                    <th>LLM Performance</th>
+                                    <th>Completed</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for stat in annotator_stats %}
+                                <tr>
+                                    <td>
+                                        <strong>{{ stat.annotator.username }}</strong>
+                                        <br><small class="text-muted">{{ stat.annotator.get_annotation_mode_display }}</small>
+                                    </td>
+                                    <td>
+                                        <span class="badge {% if stat.task_type == 'Named Entity Recognition' %}bg-primary{% else %}bg-success{% endif %}">
+                                            {{ stat.task_type }}
+                                        </span>
+                                    </td>
+                                    <td><strong>{{ stat.duration_minutes|floatformat:1 }}</strong></td>
+                                    <td><strong>{{ stat.entities_count }}</strong></td>
+                                    <td>
+                                        {% for entity_type, count in stat.entity_stats.items %}
+                                            <span class="badge bg-secondary">{{ entity_type }}: {{ count }}</span>
+                                        {% empty %}
+                                            <span class="text-muted">-</span>
+                                        {% endfor %}
+                                    </td>
+                                    <td>
+                                        {% if stat.llm_summary %}
+                                            <div class="d-flex gap-1 flex-wrap">
+                                                <span class="badge bg-success" title="Accepted">✓ {{ stat.llm_summary.accepted }}</span>
+                                                <span class="badge bg-warning" title="Modified">✎ {{ stat.llm_summary.modified }}</span>
+                                                <span class="badge bg-danger" title="Rejected">✗ {{ stat.llm_summary.rejected }}</span>
+                                                {% if stat.llm_summary.manual_added > 0 %}
+                                                <span class="badge bg-info" title="Manually added">+ {{ stat.llm_summary.manual_added }} manual</span>
+                                                {% endif %}
+                                            </div>
+                                            <small class="text-muted">Acceptance: {{ stat.llm_summary.acceptance_rate|floatformat:1 }}%</small>
+                                        {% else %}
+                                            <span class="text-muted">Manual annotation</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <small>{{ stat.completed_at|date:"Y-m-d H:i" }}</small>
+                                    </td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="7" class="text-center text-muted">No annotations found</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

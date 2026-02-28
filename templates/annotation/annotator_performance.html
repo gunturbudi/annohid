@@ -1,0 +1,248 @@
+{% extends 'base.html' %}
+
+{% block title %}Annotator Performance Report{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row">
+        <div class="col-12">
+            <h2>
+                {% if annotator %}
+                    Performance Report: {{ annotator.get_full_name }}
+                {% else %}
+                    All Annotators Performance Report
+                {% endif %}
+            </h2>
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a href="{% url 'annotation:evaluation_metrics_dashboard' %}">Metrics Dashboard</a></li>
+                    <li class="breadcrumb-item active">Performance Report</li>
+                </ol>
+            </nav>
+        </div>
+    </div>
+
+    <!-- Annotator Selector -->
+    {% if not annotator %}
+    <div class="row mt-3">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-body">
+                    <h5>Select Annotator</h5>
+                    <select class="form-select" onchange="window.location.href='{% url 'annotation:annotator_performance_detail' 0 %}'.replace('/0/', '/' + this.value + '/')">
+                        <option value="">View All Annotators</option>
+                        {% for ann in all_annotators %}
+                            <option value="{{ ann.id }}">{{ ann.get_full_name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Overall Statistics -->
+    <div class="row mt-4">
+        <div class="col-md-3">
+            <div class="card text-center">
+                <div class="card-body">
+                    <h6 class="text-muted">Total Annotations</h6>
+                    <h3 class="text-primary">{{ aggregate_stats.total_annotations|default:0 }}</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center">
+                <div class="card-body">
+                    <h6 class="text-muted">Average Precision</h6>
+                    <h3 class="text-success">{{ aggregate_stats.avg_precision|floatformat:3|default:"N/A" }}</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center">
+                <div class="card-body">
+                    <h6 class="text-muted">Average Recall</h6>
+                    <h3 class="text-info">{{ aggregate_stats.avg_recall|floatformat:3|default:"N/A" }}</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center">
+                <div class="card-body">
+                    <h6 class="text-muted">Average F1 Score</h6>
+                    <h3 class="text-warning">{{ aggregate_stats.avg_f1|floatformat:3|default:"N/A" }}</h3>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Metrics by Task Type -->
+    <div class="row mt-4">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0">Named Entity Recognition (NER) Performance</h5>
+                </div>
+                <div class="card-body">
+                    <table class="table table-sm">
+                        <tbody>
+                            <tr>
+                                <td><strong>Precision:</strong></td>
+                                <td>{{ ner_metrics.avg_precision|floatformat:3|default:"N/A" }}</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Recall:</strong></td>
+                                <td>{{ ner_metrics.avg_recall|floatformat:3|default:"N/A" }}</td>
+                            </tr>
+                            <tr>
+                                <td><strong>F1 Score:</strong></td>
+                                <td><strong>{{ ner_metrics.avg_f1|floatformat:3|default:"N/A" }}</strong></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header bg-success text-white">
+                    <h5 class="mb-0">Medical Concept Normalization (MCN) Performance</h5>
+                </div>
+                <div class="card-body">
+                    <table class="table table-sm">
+                        <tbody>
+                            <tr>
+                                <td><strong>Precision:</strong></td>
+                                <td>{{ mcn_metrics.avg_precision|floatformat:3|default:"N/A" }}</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Recall:</strong></td>
+                                <td>{{ mcn_metrics.avg_recall|floatformat:3|default:"N/A" }}</td>
+                            </tr>
+                            <tr>
+                                <td><strong>F1 Score:</strong></td>
+                                <td><strong>{{ mcn_metrics.avg_f1|floatformat:3|default:"N/A" }}</strong></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Efficiency Metrics -->
+    {% if aggregate_stats.avg_time %}
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header bg-info text-white">
+                    <h5 class="mb-0">Efficiency Metrics</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-4">
+                            <div class="text-center">
+                                <h6 class="text-muted">Average Time per Annotation</h6>
+                                <h3>{{ aggregate_stats.avg_time|floatformat:1 }} seconds</h3>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="text-center">
+                                <h6 class="text-muted">Time per Annotation (Minutes)</h6>
+                                <h3>{{ aggregate_stats.avg_time|floatformat:1|divisibleby:60 }} minutes</h3>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="text-center">
+                                <h6 class="text-muted">Annotations Evaluated</h6>
+                                <h3>{{ aggregate_stats.total_annotations }}</h3>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Recent Annotations with Metrics -->
+    <div class="row mt-4 mb-5">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header bg-secondary text-white">
+                    <h5 class="mb-0">Recent Annotations</h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-striped table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Document</th>
+                                    <th>Task Type</th>
+                                    <th>Precision</th>
+                                    <th>Recall</th>
+                                    <th>F1 Score</th>
+                                    <th>TP</th>
+                                    <th>FP</th>
+                                    <th>FN</th>
+                                    <th>Time</th>
+                                    <th>Date</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for metric in recent_metrics %}
+                                    <tr>
+                                        <td>{{ metric.annotation_result.document.title|truncatewords:5 }}</td>
+                                        <td>
+                                            <span class="badge {% if metric.annotation_result.task_type == 'ner' %}bg-primary{% else %}bg-success{% endif %}">
+                                                {{ metric.annotation_result.get_task_type_display }}
+                                            </span>
+                                        </td>
+                                        <td>
+                                            {% if metric.precision %}
+                                                {{ metric.precision|floatformat:3 }}
+                                            {% else %}
+                                                <span class="text-muted">N/A</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            {% if metric.recall %}
+                                                {{ metric.recall|floatformat:3 }}
+                                            {% else %}
+                                                <span class="text-muted">N/A</span>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            {% if metric.f1_score %}
+                                                <strong>{{ metric.f1_score|floatformat:3 }}</strong>
+                                            {% else %}
+                                                <span class="text-muted">N/A</span>
+                                            {% endif %}
+                                        </td>
+                                        <td><span class="badge bg-success">{{ metric.true_positives }}</span></td>
+                                        <td><span class="badge bg-danger">{{ metric.false_positives }}</span></td>
+                                        <td><span class="badge bg-warning">{{ metric.false_negatives }}</span></td>
+                                        <td>{{ metric.get_annotation_time_display }}</td>
+                                        <td>{{ metric.calculated_at|date:"M d, Y" }}</td>
+                                    </tr>
+                                {% empty %}
+                                    <tr>
+                                        <td colspan="10" class="text-center text-muted">
+                                            No metrics calculated yet
+                                            {% if annotator %}
+                                                for {{ annotator.get_full_name }}
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

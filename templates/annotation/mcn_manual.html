@@ -1,0 +1,767 @@
+{% extends 'base.html' %}
+
+{% block title %}Manual MCN - AnnoHID{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h2>📝 Manual Medical Concept Normalization (MCN)</h2>
+            <div>
+                <a href="{% url 'annotation:annotator_documents' %}" class="btn btn-outline-secondary">
+                    ← Back to My Documents
+                </a>
+                {% if user.can_do_llm_assisted_annotation %}
+                <a href="{% url 'annotation:mcn_llm_assisted' document.id %}" class="btn btn-outline-success">
+                    🤖 Switch to LLM-Assisted MCN
+                </a>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Instructions -->
+<div class="alert alert-info mb-4">
+    <h5><i class="fas fa-info-circle me-2"></i>Manual MCN Instructions</h5>
+    <ol class="mb-0">
+        <li><strong>Review NER entities</strong> extracted from the previous step</li>
+        <li><strong>Normalize each term</strong> to a formal medical concept</li>
+        <li><strong>Search SNOMED-CT</strong> to find the most appropriate mapping</li>
+        <li><strong>Save your mappings</strong> for analysis and final annotation</li>
+    </ol>
+</div>
+
+<div class="row">
+    <!-- Document Content -->
+    <div class="col-lg-8">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">📄 Document Content with NER Entities</h5>
+            </div>
+            <div class="card-body">
+                <div class="annotation-text" id="documentText" style="white-space: pre-wrap; line-height: 1.8;">
+                    <!-- Content will be populated by JavaScript with entity highlighting -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Entity Normalization Panel -->
+        <div class="card mt-4">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    🔄 Entity Normalization
+                    (<span id="totalEntities">0</span> entities)
+                </h5>
+            </div>
+            <div class="card-body">
+                <!-- Search/Filter Input -->
+                <div class="mb-3">
+                    <input type="text"
+                           id="entitySearchInput"
+                           class="form-control"
+                           placeholder="🔍 Search entities by text or type..."
+                           onkeyup="filterEntities()">
+                </div>
+                <div id="entityList" class="entity-list">
+                    <div class="text-center text-muted">Loading entities...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Control Panel -->
+    <div class="col-lg-4">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">⚙️ MCN Controls</h5>
+            </div>
+            <div class="card-body">
+                <div class="d-grid gap-2">
+                    <button type="button" class="btn btn-success" id="saveMcnBtn" onclick="saveMCN()">
+                        <i class="fas fa-save me-2"></i>Save MCN Mappings
+                    </button>
+                    <button type="button" class="btn btn-outline-warning" onclick="resetMappings()">
+                        <i class="fas fa-undo me-2"></i>Reset All Mappings
+                    </button>
+                </div>
+                <div id="saveFeedback" class="mt-3" style="display:none;"></div>
+
+<!-- Save overlay -->
+<div id="saveOverlay" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:9999; justify-content:center; align-items:center;">
+    <div style="background:#fff; border-radius:12px; padding:2rem 2.5rem; text-align:center; box-shadow:0 8px 32px rgba(0,0,0,0.3); max-width:360px;">
+        <div id="overlaySpinner">
+            <div class="spinner-border text-success mb-3" style="width:3rem; height:3rem;" role="status"></div>
+            <h5 class="mb-1">Saving MCN mappings...</h5>
+            <p class="text-muted mb-0 small">Please wait</p>
+        </div>
+        <div id="overlaySuccess" style="display:none;">
+            <div style="font-size:3rem; color:#28a745;" class="mb-2"><i class="fas fa-check-circle"></i></div>
+            <h5 class="mb-1">Saved successfully!</h5>
+            <p class="text-muted mb-0 small">Redirecting to your documents...</p>
+            <div class="progress mt-3" style="height:4px;">
+                <div id="overlayProgressBar" class="progress-bar bg-success" style="width:0%; transition:width linear;"></div>
+            </div>
+        </div>
+        <div id="overlayError" style="display:none;">
+            <div style="font-size:3rem; color:#dc3545;" class="mb-2"><i class="fas fa-times-circle"></i></div>
+            <h5 class="mb-1">Save failed</h5>
+            <p class="text-muted mb-0 small" id="overlayErrorMsg"></p>
+            <button class="btn btn-outline-secondary btn-sm mt-3" onclick="hideOverlay()">Close</button>
+        </div>
+    </div>
+</div>
+
+                <div class="mt-4">
+                    <h6 class="text-muted">Progress</h6>
+                    <div class="progress mb-2">
+                        <div class="progress-bar" role="progressbar" id="progressBar" style="width: 0%"></div>
+                    </div>
+                    <small class="text-muted">
+                        <span id="mappedCount">0</span> of <span id="totalCount">0</span> entities mapped
+                    </small>
+                </div>
+
+                <div class="mt-4">
+                    <h6 class="text-muted">Entity Types</h6>
+                    <div class="d-flex flex-wrap gap-1">
+                        <span class="badge entity-badge entity-SYMPTOM">SYMPTOM</span>
+                        <span class="badge entity-badge entity-DISEASE">DISEASE</span>
+                        <span class="badge entity-badge entity-BODY_PART">BODY_PART</span>
+                        <span class="badge entity-badge entity-MEDICATION">MEDICATION</span>
+                        <span class="badge entity-badge entity-PROCEDURE">PROCEDURE</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- SNOMED-CT Search Modal -->
+<div class="modal fade" id="snomedModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">🔍 Search SNOMED-CT Concepts</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6>Selected Entity</h6>
+                        <div class="border rounded p-3 bg-light mb-3">
+                            <div><strong>Text:</strong> <span id="selectedEntityText"></span></div>
+                            <div><strong>Type:</strong> <span id="selectedEntityType"></span></div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="snomedSearchInput" class="form-label">Search Term</label>
+                            <input type="text"
+                                   class="form-control"
+                                   id="snomedSearchInput"
+                                   placeholder="Enter medical term..."
+                                   onkeypress="if(event.key === 'Enter') searchSnomed()">
+                        </div>
+                        <button class="btn btn-primary" onclick="searchSnomed()">
+                            <i class="fas fa-search me-2"></i>Search SNOMED-CT
+                        </button>
+                    </div>
+                    <div class="col-md-6">
+                        <h6>Search Results</h6>
+                        <div id="snomedResults" class="snomed-results">
+                            <div class="text-center text-muted">
+                                <i class="fas fa-search fa-2x mb-3"></i>
+                                <p>Enter a search term to find SNOMED-CT concepts</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-success" id="mapSnomedBtn" onclick="mapSelectedConcept()" disabled>
+                    Map Selected Concept
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    /* Entity highlighting in document */
+    .ner-entity {
+        padding: 3px 6px;
+        border-radius: 4px;
+        cursor: pointer;
+        position: relative;
+        transition: all 0.2s;
+        border-bottom: 3px solid;
+        margin: 0 1px;
+        display: inline;
+        font-weight: 600;
+    }
+
+    .ner-entity:hover {
+        filter: brightness(0.92);
+        box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+        transform: translateY(-1px);
+    }
+
+    /* Small type label after entity */
+    .ner-entity .entity-type-tag {
+        font-size: 0.6em;
+        font-weight: 700;
+        text-transform: uppercase;
+        vertical-align: super;
+        margin-left: 2px;
+        opacity: 0.7;
+        letter-spacing: 0.5px;
+    }
+
+    /* Entity colors by type - stronger backgrounds for visibility */
+    .entity-SYMPTOM {
+        border-color: #C0392B;
+        background-color: rgba(231, 76, 60, 0.28);
+        color: #922B21;
+    }
+    .entity-DISEASE {
+        border-color: #D68910;
+        background-color: rgba(243, 156, 18, 0.28);
+        color: #7E5109;
+    }
+    .entity-BODY_PART {
+        border-color: #148F77;
+        background-color: rgba(26, 188, 156, 0.28);
+        color: #0E6655;
+    }
+    .entity-MEDICATION {
+        border-color: #2471A3;
+        background-color: rgba(52, 152, 219, 0.28);
+        color: #1A5276;
+    }
+    .entity-PROCEDURE {
+        border-color: #7D3C98;
+        background-color: rgba(155, 89, 182, 0.28);
+        color: #6C3483;
+    }
+
+    .entity-badge {
+        font-size: 0.75em;
+        color: white;
+    }
+    .entity-badge.entity-SYMPTOM { background-color: #E74C3C; }
+    .entity-badge.entity-DISEASE { background-color: #F39C12; }
+    .entity-badge.entity-BODY_PART { background-color: #1ABC9C; }
+    .entity-badge.entity-MEDICATION { background-color: #3498DB; }
+    .entity-badge.entity-PROCEDURE { background-color: #9B59B6; }
+
+    /* Entity list */
+    .entity-item {
+        background: white;
+        border-radius: 8px;
+        padding: 1rem;
+        margin-bottom: 0.5rem;
+        border-left: 4px solid;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        transition: all 0.3s;
+    }
+
+    .entity-item:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+    }
+
+    .entity-item.mapped {
+        border-left-color: #28a745;
+        background-color: #f8fff9;
+    }
+
+    .entity-item.unmapped {
+        border-left-color: #6c757d;
+    }
+
+    .snomed-results {
+        max-height: 400px;
+        overflow-y: auto;
+        border: 1px solid #dee2e6;
+        border-radius: 8px;
+        padding: 10px;
+    }
+
+    .snomed-result {
+        border: 1px solid #dee2e6;
+        border-radius: 8px;
+        padding: 12px;
+        margin-bottom: 10px;
+        cursor: pointer;
+        transition: all 0.3s;
+    }
+
+    .snomed-result:hover {
+        border-color: #4facfe;
+        box-shadow: 0 2px 8px rgba(79, 172, 254, 0.1);
+    }
+
+    .snomed-result.selected {
+        border-color: #28a745;
+        background: #f8fff9;
+        box-shadow: 0 2px 8px rgba(40, 167, 69, 0.1);
+    }
+</style>
+
+<script>
+    let nerEntities = {{ ner_entities|default:"[]"|safe }} || [];
+    let mcnMappings = {};
+    let selectedEntityIndex = null;
+    let selectedSnomedConcept = null;
+
+    // Helper function to safely get CSRF token
+    function getCSRFToken() {
+        // Try meta tag first (most reliable, from base.html)
+        const metaTag = document.querySelector('meta[name="csrf-token"]');
+        if (metaTag) {
+            return metaTag.getAttribute('content');
+        }
+
+        // Fallback to form input
+        const csrfInput = document.querySelector('[name=csrfmiddlewaretoken]');
+        if (csrfInput) {
+            return csrfInput.value;
+        }
+
+        // Fallback to cookie
+        const cookieValue = document.cookie
+            .split('; ')
+            .find(row => row.startsWith('csrftoken='));
+        if (cookieValue) {
+            return cookieValue.split('=')[1];
+        }
+
+        console.error('CSRF token not found');
+        return null;
+    }
+
+    // Load existing MCN mappings if available
+    {% if existing_mcn and existing_mcn.entities_json %}
+    const existingMappings = {{ existing_mcn_entities_json|safe }} || [];
+    // Match saved entities to current entities by text and position to handle filtering
+    existingMappings.forEach((savedEntity) => {
+        // Find the index in nerEntities that matches this saved entity
+        const matchIndex = nerEntities.findIndex(e =>
+            e.text === savedEntity.text &&
+            e.start === savedEntity.start &&
+            e.label === savedEntity.label
+        );
+
+        if (matchIndex >= 0 && savedEntity.snomed_concept) {
+            mcnMappings[matchIndex] = savedEntity.snomed_concept;
+        }
+    });
+    {% endif %}
+
+    document.addEventListener('DOMContentLoaded', function() {
+        displayDocument();
+        displayEntityList();
+        updateProgress();
+    });
+
+    function resolveOverlaps(entities) {
+        if (!entities || entities.length === 0) return [];
+
+        const normalized = entities.map((e, idx) => ({
+            start: e.start || 0,
+            end: e.end || 0,
+            label: e.label || 'UNKNOWN',
+            text: e.text || '',
+            originalIndex: idx
+        })).filter(e => e.end > e.start);
+
+        // Sort by start ascending, then by span length descending (prefer longer)
+        normalized.sort((a, b) => a.start - b.start || (b.end - b.start) - (a.end - a.start));
+
+        // Remove overlaps: keep earlier/longer entities
+        const result = [];
+        let lastEnd = 0;
+        for (const entity of normalized) {
+            if (entity.start >= lastEnd) {
+                result.push(entity);
+                lastEnd = entity.end;
+            }
+        }
+        return result;
+    }
+
+    function escapeHtmlText(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    function displayDocument() {
+        const documentText = document.getElementById('documentText');
+        const text = `{{ document.content|escapejs }}`;
+
+        const resolved = resolveOverlaps(nerEntities);
+        let result = '';
+        let lastIndex = 0;
+
+        resolved.forEach(entity => {
+            const start = Math.max(0, Math.min(entity.start, text.length));
+            const end = Math.max(start, Math.min(entity.end, text.length));
+
+            // Escape text before this entity
+            if (start > lastIndex) {
+                result += escapeHtmlText(text.substring(lastIndex, start));
+            }
+
+            const entityText = escapeHtmlText(text.substring(start, end));
+            const escapedTitle = escapeHtmlText(`${entity.label}: ${entity.text}`);
+            const shortLabel = entity.label.replace('_', ' ');
+            result += `<span class="ner-entity entity-${entity.label}"
+                             data-entity-index="${entity.originalIndex}"
+                             onclick="openEntityMapping(${entity.originalIndex})"
+                             title="${escapedTitle}">${entityText}<span class="entity-type-tag">${shortLabel}</span></span>`;
+
+            lastIndex = end;
+        });
+
+        // Remaining text
+        if (lastIndex < text.length) {
+            result += escapeHtmlText(text.substring(lastIndex));
+        }
+
+        documentText.innerHTML = result;
+    }
+
+    function displayEntityList(filteredEntities = null) {
+        const entityList = document.getElementById('entityList');
+        const entitiesToDisplay = filteredEntities !== null ? filteredEntities : nerEntities;
+
+        if (nerEntities.length === 0) {
+            entityList.innerHTML = '<div class="text-center text-muted">No entities found.</div>';
+            return;
+        }
+
+        if (entitiesToDisplay.length === 0) {
+            entityList.innerHTML = '<div class="text-center text-muted">No entities match your search.</div>';
+            return;
+        }
+
+        let html = '';
+        entitiesToDisplay.forEach((entity) => {
+            // Find the actual index in the original nerEntities array
+            const index = nerEntities.findIndex(e => e.start === entity.start && e.text === entity.text && e.label === entity.label);
+            const isMapped = mcnMappings[index] !== undefined;
+            const mappingInfo = isMapped ? mcnMappings[index] : null;
+
+            html += `
+                <div class="entity-item ${isMapped ? 'mapped' : 'unmapped'}" data-entity-index="${index}">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div class="flex-grow-1">
+                            <div class="d-flex align-items-center mb-2">
+                                <strong class="me-2">"${entity.text}"</strong>
+                                <span class="badge entity-badge entity-${entity.label}">${entity.label}</span>
+                                ${isMapped ? '<span class="badge bg-success ms-2">Mapped</span>' : '<span class="badge bg-secondary ms-2">Unmapped</span>'}
+                            </div>
+                            ${isMapped ? `
+                                <div class="small text-success">
+                                    <strong>Mapped to:</strong> ${mappingInfo.term || mappingInfo.preferredTerm}<br>
+                                    <strong>SNOMED-CT:</strong> ${mappingInfo.conceptId}
+                                </div>
+                            ` : '<div class="small text-muted">Click "Map" to search SNOMED-CT</div>'}
+                        </div>
+                        <div class="btn-group-vertical btn-group-sm">
+                            <button class="btn btn-outline-primary btn-sm" onclick="openEntityMapping(${index})">
+                                🔍 Map
+                            </button>
+                            ${isMapped ? `<button class="btn btn-outline-danger btn-sm" onclick="removeMapping(${index})">Remove</button>` : ''}
+                        </div>
+                    </div>
+                </div>
+            `;
+        });
+
+        entityList.innerHTML = html;
+        document.getElementById('totalEntities').textContent = filteredEntities !== null
+            ? `${entitiesToDisplay.length} of ${nerEntities.length}`
+            : nerEntities.length;
+    }
+
+    function filterEntities() {
+        const searchInput = document.getElementById('entitySearchInput');
+        const searchTerm = searchInput.value.toLowerCase().trim();
+
+        if (searchTerm === '') {
+            // No filter, show all entities
+            displayEntityList();
+            return;
+        }
+
+        // Filter entities by text or label
+        const filtered = nerEntities.filter(entity => {
+            const textMatch = entity.text.toLowerCase().includes(searchTerm);
+            const labelMatch = entity.label.toLowerCase().includes(searchTerm);
+            return textMatch || labelMatch;
+        });
+
+        displayEntityList(filtered);
+    }
+
+    function openEntityMapping(entityIndex) {
+        selectedEntityIndex = entityIndex;
+        const entity = nerEntities[entityIndex];
+
+        document.getElementById('selectedEntityText').textContent = entity.text;
+        document.getElementById('selectedEntityType').textContent = entity.label;
+        document.getElementById('selectedEntityType').className = `badge entity-badge entity-${entity.label}`;
+
+        // Pre-fill search with entity text
+        document.getElementById('snomedSearchInput').value = entity.text;
+
+        // Clear previous results
+        document.getElementById('snomedResults').innerHTML = '<div class="text-center text-muted"><p>Enter a search term to find SNOMED-CT concepts</p></div>';
+        selectedSnomedConcept = null;
+        document.getElementById('mapSnomedBtn').disabled = true;
+
+        // Show modal
+        const modal = new bootstrap.Modal(document.getElementById('snomedModal'));
+        modal.show();
+    }
+
+    function searchSnomed() {
+        const searchTerm = document.getElementById('snomedSearchInput').value.trim();
+        if (!searchTerm) {
+            alert('Please enter a search term');
+            return;
+        }
+
+        const csrfToken = getCSRFToken();
+        if (!csrfToken) {
+            alert('Security token not found. Please refresh the page.');
+            return;
+        }
+
+        const resultsDiv = document.getElementById('snomedResults');
+        resultsDiv.innerHTML = `
+            <div class="text-center">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Searching...</span>
+                </div>
+                <p class="mt-2 text-muted">Searching SNOMED-CT for "${searchTerm}"...</p>
+            </div>
+        `;
+
+        fetch('{% url "annotation:search_snomed" %}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrfToken
+            },
+            body: JSON.stringify({
+                term: searchTerm,
+                max_results: 10
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                displaySnomedResults(data.candidates);
+            } else {
+                resultsDiv.innerHTML = '<div class="alert alert-danger">Error: ' + data.error + '</div>';
+            }
+        })
+        .catch(error => {
+            console.error('SNOMED search error:', error);
+            resultsDiv.innerHTML = '<div class="alert alert-danger">Search failed. Please try again.</div>';
+        });
+    }
+
+    function displaySnomedResults(results) {
+        const resultsDiv = document.getElementById('snomedResults');
+
+        if (results.length === 0) {
+            resultsDiv.innerHTML = '<div class="text-center text-muted"><p>No SNOMED-CT concepts found.</p></div>';
+            return;
+        }
+
+        let html = '';
+        results.forEach((result, index) => {
+            const term = result.term || result.preferredTerm || 'Unknown term';
+            html += `
+                <div class="snomed-result" data-concept-index="${index}" onclick="selectSnomedConcept(${index})">
+                    <div class="fw-bold">${term}</div>
+                    <div class="small text-muted">ID: ${result.conceptId}</div>
+                    ${result.fsn ? `<div class="small text-secondary">${result.fsn}</div>` : ''}
+                </div>
+            `;
+        });
+
+        resultsDiv.innerHTML = html;
+        window.snomedSearchResults = results;
+    }
+
+    function selectSnomedConcept(index) {
+        document.querySelectorAll('.snomed-result.selected').forEach(el => {
+            el.classList.remove('selected');
+        });
+
+        const selectedElement = document.querySelector(`[data-concept-index="${index}"]`);
+        selectedElement.classList.add('selected');
+
+        selectedSnomedConcept = window.snomedSearchResults[index];
+        document.getElementById('mapSnomedBtn').disabled = false;
+    }
+
+    function mapSelectedConcept() {
+        if (!selectedSnomedConcept || selectedEntityIndex === null) {
+            alert('Please select a SNOMED-CT concept first');
+            return;
+        }
+
+        mcnMappings[selectedEntityIndex] = selectedSnomedConcept;
+
+        // Close modal
+        bootstrap.Modal.getInstance(document.getElementById('snomedModal')).hide();
+
+        // Update displays
+        displayEntityList();
+        updateProgress();
+    }
+
+    function removeMapping(entityIndex) {
+        delete mcnMappings[entityIndex];
+        displayEntityList();
+        updateProgress();
+    }
+
+    function updateProgress() {
+        const mappedCount = Object.keys(mcnMappings).length;
+        const totalCount = nerEntities.length;
+        const progressPercent = totalCount > 0 ? (mappedCount / totalCount) * 100 : 0;
+
+        document.getElementById('progressBar').style.width = progressPercent + '%';
+        document.getElementById('mappedCount').textContent = mappedCount;
+        document.getElementById('totalCount').textContent = totalCount;
+    }
+
+    function resetMappings() {
+        if (!confirm('Are you sure you want to reset all mappings?')) {
+            return;
+        }
+
+        mcnMappings = {};
+        displayEntityList();
+        updateProgress();
+    }
+
+    function showOverlay(state, errorMsg) {
+        const overlay = document.getElementById('saveOverlay');
+        const spinner = document.getElementById('overlaySpinner');
+        const success = document.getElementById('overlaySuccess');
+        const error = document.getElementById('overlayError');
+        spinner.style.display = state === 'saving' ? 'block' : 'none';
+        success.style.display = state === 'success' ? 'block' : 'none';
+        error.style.display = state === 'error' ? 'block' : 'none';
+        if (state === 'error') {
+            document.getElementById('overlayErrorMsg').textContent = errorMsg || 'Unknown error';
+        }
+        if (state === 'success') {
+            const bar = document.getElementById('overlayProgressBar');
+            bar.style.width = '0%';
+            requestAnimationFrame(() => { bar.style.transition = 'width 1.4s linear'; bar.style.width = '100%'; });
+        }
+        overlay.style.display = 'flex';
+    }
+
+    function hideOverlay() {
+        document.getElementById('saveOverlay').style.display = 'none';
+        document.getElementById('saveMcnBtn').disabled = false;
+        document.getElementById('saveMcnBtn').innerHTML = '<i class="fas fa-save me-2"></i>Save MCN Mappings';
+    }
+
+    function saveMCN() {
+        const csrfToken = getCSRFToken();
+        if (!csrfToken) {
+            showOverlay('error', 'Security token not found. Please refresh the page.');
+            return;
+        }
+
+        // Show loading state
+        const btn = document.getElementById('saveMcnBtn');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Saving...';
+        showOverlay('saving');
+
+        // Create normalized entities with mappings
+        const normalizedEntities = nerEntities.map((entity, index) => {
+            const mapping = mcnMappings[index];
+            return {
+                ...entity,
+                snomed_concept: mapping || null,
+                is_mapped: mapping !== undefined,
+                // MCN tracking fields
+                mcn_source: 'manual',
+                mcn_status: mapping ? 'mapped' : 'unmapped'
+            };
+        });
+
+        fetch('{% url "annotation:mcn_manual" document.id %}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrfToken
+            },
+            body: JSON.stringify({
+                entities: normalizedEntities
+            })
+        })
+        .then(response => {
+            if (!response.ok) throw new Error('Server returned ' + response.status);
+            return response.json();
+        })
+        .then(data => {
+            if (data.success) {
+                showOverlay('success');
+                const g = data.gamification;
+                if (g && !g.is_status_only) {
+                    showGamificationToast(data);
+                    setTimeout(function() {
+                        window.location.href = '{% url "annotation:annotator_documents" %}';
+                    }, 3000);
+                } else {
+                    setTimeout(function() {
+                        window.location.href = '{% url "annotation:annotator_documents" %}';
+                    }, 1500);
+                }
+            } else {
+                showOverlay('error', data.error || 'Unknown error');
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-save me-2"></i>Save MCN Mappings';
+            }
+        })
+        .catch(error => {
+            console.error('Save error:', error);
+            showOverlay('error', error.message);
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-save me-2"></i>Save MCN Mappings';
+        });
+    }
+
+    // Handle Enter key in search input
+    document.addEventListener('DOMContentLoaded', function() {
+        const searchInput = document.getElementById('snomedSearchInput');
+        if (searchInput) {
+            searchInput.addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    searchSnomed();
+                }
+            });
+        }
+    });
+</script>
+{% endblock %}
+
+{% block extra_js %}
+<!-- CSRF Token for AJAX -->
+<input type="hidden" name="csrfmiddlewaretoken" value="{{ csrf_token }}">
+{% endblock %}

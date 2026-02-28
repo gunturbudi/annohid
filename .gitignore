@@ -1,0 +1,65 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Virtual environment
+venv/
+env/
+.venv/
+
+# Django
+db.sqlite3
+db.sqlite3-journal
+staticfiles/
+
+# Environment / secrets
+.env
+
+# Logs
+*.log
+
+# OS files
+Thumbs.db
+Desktop.ini
+.DS_Store
+nul
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Byte-compiled
+*.egg-info/
+dist/
+build/
+
+# docs/mds - large/binary artifacts from analysis, backups, screenshots
+docs/mds/backup_db/
+docs/mds/playwright-mcp/
+docs/mds/screenshots/
+docs/mds/reports/*.json
+docs/mds/analysis_notebooks/.ipynb_checkpoints/
+docs/mds/analysis_notebooks/analysis_output/
+docs/mds/analysis_notebooks/analysis_output_gold/
+docs/mds/analysis_notebooks/new_analysis/
+docs/mds/analysis_notebooks/*.ipynb
+docs/mds/presentation/*.pdf
+docs/mds/presentation/assets/
+docs/mds/presentation/figures/
+docs/mds/reports/reports/data/
+docs/mds/reports/reports/figures/
+docs/mds/reports/reports/images/
+docs/mds/reports/*.pdf
+*.sqlite3.bak
+
+# Large binary files
+*.rar
+*.zip
+*.pdf
+*.png
+CLAUDE.md
+docs/

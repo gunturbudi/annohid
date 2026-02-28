@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+
+{% block title %}Add API Key - {{ provider.display_name }}{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header bg-primary text-white">
+                    <h4 class="mb-0">
+                        <i class="fas fa-plus"></i> Add API Key for {{ provider.display_name }}
+                    </h4>
+                </div>
+                <div class="card-body">
+                    <div class="alert alert-info">
+                        <h6><i class="fas fa-info-circle"></i> About {{ provider.display_name }}</h6>
+                        <p class="mb-0">{{ provider.description }}</p>
+                    </div>
+
+                    <form method="post">
+                        {% csrf_token %}
+
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Key Name *</label>
+                            <input type="text" class="form-control" name="key_name"
+                                   placeholder="e.g., Production Key, Test Key" required>
+                            <small class="text-muted">A descriptive name for this API key</small>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">API Key *</label>
+                            <input type="password" class="form-control" name="api_key"
+                                   placeholder="Paste your API key here" required>
+                            <small class="text-muted">
+                                Your API key from {{ provider.display_name }}
+                                {% if provider.documentation_url %}
+                                    - <a href="{{ provider.documentation_url }}" target="_blank">Get API key here</a>
+                                {% endif %}
+                            </small>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Notes (Optional)</label>
+                            <textarea class="form-control" name="notes" rows="3"
+                                      placeholder="Internal notes about this key"></textarea>
+                        </div>
+
+                        <div class="alert alert-warning">
+                            <i class="fas fa-exclamation-triangle"></i>
+                            <strong>Security Note:</strong> API keys are stored in the database.
+                            In production, ensure proper encryption and access controls.
+                        </div>
+
+                        <div class="d-grid gap-2">
+                            <button type="submit" class="btn btn-success btn-lg">
+                                <i class="fas fa-save"></i> Add API Key & Test
+                            </button>
+                            <a href="{% url 'annotation:api_key_management' %}" class="btn btn-outline-secondary">
+                                <i class="fas fa-times"></i> Cancel
+                            </a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            {% if provider.name == 'openrouter' %}
+            <div class="card mt-4">
+                <div class="card-header bg-success text-white">
+                    <h5 class="mb-0"><i class="fas fa-star"></i> Why OpenRouter?</h5>
+                </div>
+                <div class="card-body">
+                    <ul class="mb-0">
+                        <li><strong>100+ Models</strong> - Access OpenAI, Anthropic, Google, Meta, and more</li>
+                        <li><strong>One API Key</strong> - No need for multiple provider keys</li>
+                        <li><strong>Free Models</strong> - Test with zero cost</li>
+                        <li><strong>Easy Switching</strong> - Change models without code changes</li>
+                        <li><strong>Cost Tracking</strong> - Monitor all usage in one place</li>
+                    </ul>
+                    <div class="mt-3">
+                        <a href="https://openrouter.ai" target="_blank" class="btn btn-success">
+                            <i class="fas fa-external-link-alt"></i> Get OpenRouter API Key
+                        </a>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

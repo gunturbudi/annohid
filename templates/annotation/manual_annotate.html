@@ -1,0 +1,790 @@
+{% extends 'base.html' %}
+
+{% block title %}Manual Medical Text Annotation - AnnoHID{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h2>✋ Manual Medical Text Annotation</h2>
+            <div>
+                <a href="{% url 'annotation:document_detail' document.id %}" class="btn btn-outline-secondary">
+                    ← Back to Document
+                </a>
+                {% if user.can_do_llm_assisted_annotation %}
+                <a href="{% url 'annotation:llm_assisted_annotate' document.id %}" class="btn btn-outline-success">
+                    🤖 Switch to LLM-Assisted Mode
+                </a>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Instructions -->
+<div class="alert alert-info mb-4">
+    <h5><i class="fas fa-info-circle me-2"></i>How to Use Manual Annotation</h5>
+    <ol class="mb-0">
+        <li><strong>Select text spans</strong> by clicking and dragging over medical terms</li>
+        <li><strong>Choose entity type</strong> from the colored buttons (SYMPTOM, DISEASE, etc.)</li>
+        <li><strong>Review your annotations</strong> in the list and remove any if needed</li>
+        <li><strong>Save annotations</strong> when you're satisfied with your work</li>
+    </ol>
+</div>
+
+<div class="row">
+    <!-- Document Content and Annotation Interface -->
+    <div class="col-lg-8">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">📄 Document Content</h5>
+            </div>
+            <div class="card-body">
+                <!-- Entity Type Selection -->
+                <div class="mb-3">
+                    <label class="form-label fw-bold">Select Entity Type:</label>
+                    <div class="entity-types">
+                        <div class="entity-type-btn selected" data-type="SYMPTOM" data-bs-toggle="tooltip" data-bs-placement="top" title="Loading definition...">SYMPTOM</div>
+                        <div class="entity-type-btn" data-type="DISEASE" data-bs-toggle="tooltip" data-bs-placement="top" title="Loading definition...">DISEASE</div>
+                        <div class="entity-type-btn" data-type="BODY_PART" data-bs-toggle="tooltip" data-bs-placement="top" title="Loading definition...">BODY_PART</div>
+                        <div class="entity-type-btn" data-type="MEDICATION" data-bs-toggle="tooltip" data-bs-placement="top" title="Loading definition...">MEDICATION</div>
+                        <div class="entity-type-btn" data-type="PROCEDURE" data-bs-toggle="tooltip" data-bs-placement="top" title="Loading definition...">PROCEDURE</div>
+                    </div>
+                </div>
+
+                <!-- Text for Annotation -->
+                <div class="annotation-text" id="annotationText">
+                    {{ document.content }}
+                </div>
+                <small class="text-muted">Select text with your mouse to create annotations</small>
+            </div>
+        </div>
+
+        <!-- Current Annotations -->
+        <div class="card mt-4">
+            <div class="card-header">
+                <h5 class="card-title mb-0">📝 Current Annotations (<span id="annotationCount">0</span>)</h5>
+            </div>
+            <div class="card-body">
+                <div id="annotationList" class="annotation-list">
+                    <div class="text-center text-muted">No annotations yet. Select text above to start.</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Annotation Panel -->
+    <div class="col-lg-4">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">⚙️ Annotation Controls</h5>
+            </div>
+            <div class="card-body">
+                <div class="d-grid gap-2">
+                    <button type="button" class="btn btn-success" id="saveBtn" onclick="saveAnnotations()">
+                        <i class="fas fa-save me-2"></i>Save Manual Annotations
+                    </button>
+                    <button type="button" class="btn btn-outline-warning" onclick="clearAnnotations()">
+                        <i class="fas fa-eraser me-2"></i>Clear All Annotations
+                    </button>
+                </div>
+                <div id="saveFeedback" class="mt-3" style="display:none;"></div>
+
+<!-- Save overlay -->
+<div id="saveOverlay" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:9999; justify-content:center; align-items:center;">
+    <div style="background:#fff; border-radius:12px; padding:2rem 2.5rem; text-align:center; box-shadow:0 8px 32px rgba(0,0,0,0.3); max-width:360px;">
+        <div id="overlaySpinner">
+            <div class="spinner-border text-success mb-3" style="width:3rem; height:3rem;" role="status"></div>
+            <h5 class="mb-1">Saving annotations...</h5>
+            <p class="text-muted mb-0 small">Please wait</p>
+        </div>
+        <div id="overlaySuccess" style="display:none;">
+            <div style="font-size:3rem; color:#28a745;" class="mb-2"><i class="fas fa-check-circle"></i></div>
+            <h5 class="mb-1">Saved successfully!</h5>
+            <p class="text-muted mb-0 small">Redirecting to your documents...</p>
+            <div class="progress mt-3" style="height:4px;">
+                <div id="overlayProgressBar" class="progress-bar bg-success" style="width:0%; transition:width linear;"></div>
+            </div>
+        </div>
+        <div id="overlayError" style="display:none;">
+            <div style="font-size:3rem; color:#dc3545;" class="mb-2"><i class="fas fa-times-circle"></i></div>
+            <h5 class="mb-1">Save failed</h5>
+            <p class="text-muted mb-0 small" id="overlayErrorMsg"></p>
+            <button class="btn btn-outline-secondary btn-sm mt-3" onclick="hideOverlay()">Close</button>
+        </div>
+    </div>
+</div>
+
+                <div class="mt-4">
+                    <h6 class="text-muted">Entity Types</h6>
+                    <div class="d-flex flex-wrap gap-1">
+                        <span class="badge entity-badge entity-SYMPTOM" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Loading definition...">SYMPTOM</span>
+                        <span class="badge entity-badge entity-DISEASE" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Loading definition...">DISEASE</span>
+                        <span class="badge entity-badge entity-BODY_PART" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Loading definition...">BODY_PART</span>
+                        <span class="badge entity-badge entity-MEDICATION" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Loading definition...">MEDICATION</span>
+                        <span class="badge entity-badge entity-PROCEDURE" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Loading definition...">PROCEDURE</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Statistics -->
+        <div class="card mt-4">
+            <div class="card-header">
+                <h5 class="card-title mb-0">📊 Annotation Stats</h5>
+            </div>
+            <div class="card-body">
+                <div class="row text-center">
+                    <div class="col-6">
+                        <h6 class="text-primary" id="totalEntities">0</h6>
+                        <small class="text-muted">Total Entities</small>
+                    </div>
+                    <div class="col-6">
+                        <h6 class="text-success" id="entityTypes">0</h6>
+                        <small class="text-muted">Entity Types</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    /* Entity Type Selection Buttons */
+    .entity-types {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-bottom: 20px;
+        justify-content: center;
+    }
+
+    .entity-type-btn {
+        background: white;
+        border: 2px solid;
+        border-radius: 25px;
+        padding: 8px 16px;
+        cursor: pointer;
+        transition: all 0.3s;
+        font-weight: 500;
+        font-size: 14px;
+    }
+
+    .entity-type-btn:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+    }
+
+    .entity-type-btn.selected {
+        color: white;
+        transform: scale(1.05);
+    }
+
+    /* Entity colors */
+    .entity-SYMPTOM, .entity-type-btn[data-type="SYMPTOM"], .entity-badge.entity-SYMPTOM {
+        border-color: #FF6B6B;
+        background-color: rgba(255, 107, 107, 0.1);
+    }
+    .entity-type-btn[data-type="SYMPTOM"].selected, .entity-badge.entity-SYMPTOM {
+        background-color: #FF6B6B;
+        color: white;
+    }
+
+    .entity-DISEASE, .entity-type-btn[data-type="DISEASE"], .entity-badge.entity-DISEASE {
+        border-color: #FFB74D;
+        background-color: rgba(255, 183, 77, 0.1);
+    }
+    .entity-type-btn[data-type="DISEASE"].selected, .entity-badge.entity-DISEASE {
+        background-color: #FFB74D;
+        color: white;
+    }
+
+    .entity-BODY_PART, .entity-type-btn[data-type="BODY_PART"], .entity-badge.entity-BODY_PART {
+        border-color: #4ECDC4;
+        background-color: rgba(78, 205, 196, 0.1);
+    }
+    .entity-type-btn[data-type="BODY_PART"].selected, .entity-badge.entity-BODY_PART {
+        background-color: #4ECDC4;
+        color: white;
+    }
+
+    .entity-MEDICATION, .entity-type-btn[data-type="MEDICATION"], .entity-badge.entity-MEDICATION {
+        border-color: #45B7D1;
+        background-color: rgba(69, 183, 209, 0.1);
+    }
+    .entity-type-btn[data-type="MEDICATION"].selected, .entity-badge.entity-MEDICATION {
+        background-color: #45B7D1;
+        color: white;
+    }
+
+    .entity-PROCEDURE, .entity-type-btn[data-type="PROCEDURE"], .entity-badge.entity-PROCEDURE {
+        border-color: #A29BFE;
+        background-color: rgba(162, 155, 254, 0.1);
+    }
+    .entity-type-btn[data-type="PROCEDURE"].selected, .entity-badge.entity-PROCEDURE {
+        background-color: #A29BFE;
+        color: white;
+    }
+
+    /* Annotation Text */
+    .annotation-text {
+        background: #fff;
+        border: 2px solid #e9ecef;
+        border-radius: 10px;
+        padding: 20px;
+        font-size: 16px;
+        line-height: 1.8;
+        margin-bottom: 20px;
+        user-select: text;
+        cursor: text;
+        min-height: 200px;
+    }
+
+    .annotation-text.selecting {
+        border-color: #667eea;
+    }
+
+    /* Highlighted entities */
+    .entity-highlight {
+        padding: 2px 4px;
+        border-radius: 4px;
+        cursor: pointer;
+        position: relative;
+        transition: all 0.2s;
+        border: 1px solid;
+        margin: 0 1px;
+    }
+
+    .entity-highlight:hover {
+        transform: scale(1.02);
+        box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    }
+
+    .entity-SYMPTOM.entity-highlight {
+        background-color: rgba(255, 107, 107, 0.3);
+        border-color: #FF6B6B;
+    }
+    .entity-DISEASE.entity-highlight {
+        background-color: rgba(255, 183, 77, 0.3);
+        border-color: #FFB74D;
+    }
+    .entity-BODY_PART.entity-highlight {
+        background-color: rgba(78, 205, 196, 0.3);
+        border-color: #4ECDC4;
+    }
+    .entity-MEDICATION.entity-highlight {
+        background-color: rgba(69, 183, 209, 0.3);
+        border-color: #45B7D1;
+    }
+    .entity-PROCEDURE.entity-highlight {
+        background-color: rgba(162, 155, 254, 0.3);
+        border-color: #A29BFE;
+    }
+
+    /* Annotation List */
+    .annotation-list {
+        max-height: 400px;
+        overflow-y: auto;
+    }
+
+    .annotation-item {
+        background: white;
+        border-radius: 8px;
+        padding: 0.75rem;
+        margin-bottom: 0.5rem;
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        border-left: 4px solid;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+
+    .annotation-item:last-child {
+        margin-bottom: 0;
+    }
+
+    .annotation-text-span {
+        font-weight: 500;
+        margin-right: 0.5rem;
+    }
+
+    .annotation-type {
+        padding: 2px 8px;
+        border-radius: 12px;
+        font-size: 12px;
+        font-weight: 500;
+    }
+
+    .annotation-actions {
+        display: flex;
+        gap: 5px;
+        flex-shrink: 0;
+    }
+
+    .entity-type-select {
+        font-size: 12px;
+        font-weight: 500;
+        padding: 2px 8px;
+        border-radius: 12px;
+        border: 1px solid #dee2e6;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+
+    .entity-type-select:hover {
+        border-color: #0d6efd;
+        box-shadow: 0 0 0 0.1rem rgba(13, 110, 253, 0.25);
+    }
+
+    .entity-type-select:focus {
+        border-color: #0d6efd;
+        box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.25);
+        outline: none;
+    }
+
+    .entity-badge {
+        font-size: 0.75em;
+    }
+</style>
+
+<script>
+    let currentText = `{{ document.content|escapejs }}`;
+    let annotations = [];
+    let deletionHistory = [];  // Track deleted entities for statistics
+    let selectedEntityType = 'SYMPTOM';
+    let annotationId = {{ existing_annotation.id|default:"null" }};
+
+    // Load existing annotations if any
+    {% if existing_annotation %}
+    annotations = {{ existing_annotation.entities_json|safe }};
+    {% endif %}
+
+    // Entity definitions storage
+    let entityDefinitions = {};
+
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
+        // Initialize text content from JS to ensure DOM matches currentText exactly
+        // (avoids template whitespace causing offset drift)
+        const annotationText = document.getElementById('annotationText');
+        annotationText.textContent = currentText;
+
+        setupEntityTypeButtons();
+        setupTextSelection();
+        loadEntityDefinitions();
+
+        // If we have existing annotations, display them
+        if (annotations.length > 0) {
+            updateAnnotationDisplay();
+            updateAnnotationList();
+            updateStats();
+        }
+    });
+
+    function setupEntityTypeButtons() {
+        document.querySelectorAll('.entity-type-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                // Remove selected class from all buttons
+                document.querySelectorAll('.entity-type-btn').forEach(b => b.classList.remove('selected'));
+                // Add selected class to clicked button
+                this.classList.add('selected');
+                // Update selected entity type
+                selectedEntityType = this.dataset.type;
+            });
+        });
+    }
+
+    function loadEntityDefinitions() {
+        // Fetch entity definitions from API
+        fetch('{% url "annotation:get_entity_definitions" %}', {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                entityDefinitions = data.definitions;
+                updateEntityTooltips();
+            } else {
+                console.error('Failed to load entity definitions:', data.error);
+            }
+        })
+        .catch(error => {
+            console.error('Error loading entity definitions:', error);
+        });
+    }
+
+    function updateEntityTooltips() {
+        // Update tooltips for entity type buttons
+        document.querySelectorAll('.entity-type-btn[data-type]').forEach(btn => {
+            const entityType = btn.dataset.type;
+            const definition = entityDefinitions[entityType];
+
+            if (definition) {
+                let tooltipContent = `<strong>${definition.entity_type_display}:</strong><br>${definition.definition}`;
+
+                if (definition.examples) {
+                    tooltipContent += `<br><br><strong>Examples:</strong><br>${definition.examples}`;
+                }
+
+                btn.setAttribute('title', tooltipContent);
+                btn.setAttribute('data-bs-html', 'true');
+            }
+        });
+
+        // Update tooltips for entity badges
+        document.querySelectorAll('.entity-badge[data-bs-toggle="tooltip"]').forEach(badge => {
+            const entityType = badge.textContent.trim();
+            const definition = entityDefinitions[entityType];
+
+            if (definition) {
+                let tooltipContent = `<strong>${definition.entity_type_display}:</strong><br>${definition.definition}`;
+
+                if (definition.examples) {
+                    tooltipContent += `<br><br><strong>Examples:</strong><br>${definition.examples}`;
+                }
+
+                badge.setAttribute('title', tooltipContent);
+                badge.setAttribute('data-bs-html', 'true');
+            }
+        });
+
+        // Initialize Bootstrap tooltips
+        var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+        var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+            return new bootstrap.Tooltip(tooltipTriggerEl, {
+                delay: { show: 300, hide: 100 }
+            });
+        });
+    }
+
+    function setupTextSelection() {
+        const annotationText = document.getElementById('annotationText');
+
+        annotationText.addEventListener('mouseup', function() {
+            const selection = window.getSelection();
+            if (selection.toString().trim().length > 0) {
+                const range = selection.getRangeAt(0);
+                const rawText = selection.toString();
+                const selectedText = rawText.trim();
+
+                // Adjust start offset to skip any leading whitespace that was trimmed
+                const leadingSpaces = rawText.length - rawText.trimStart().length;
+                const start = getTextOffset(annotationText, range.startContainer, range.startOffset) + leadingSpaces;
+                const end = start + selectedText.length;
+
+                // Create annotation
+                createAnnotation(selectedText, start, end);
+
+                // Clear selection
+                selection.removeAllRanges();
+            }
+        });
+    }
+
+    function getTextOffset(root, node, offset) {
+        let textOffset = 0;
+        let walker = document.createTreeWalker(
+            root,
+            NodeFilter.SHOW_TEXT,
+            null,
+            false
+        );
+
+        let currentNode;
+        while (currentNode = walker.nextNode()) {
+            if (currentNode === node) {
+                return textOffset + offset;
+            }
+            textOffset += currentNode.textContent.length;
+        }
+        return textOffset;
+    }
+
+    function createAnnotation(text, start, end) {
+        // Check for overlaps
+        const hasOverlap = annotations.some(ann =>
+            (start < ann.end && end > ann.start)
+        );
+
+        if (hasOverlap) {
+            alert('This text overlaps with an existing annotation. Please select non-overlapping text.');
+            return;
+        }
+
+        // Add annotation
+        const annotation = {
+            text: text,
+            label: selectedEntityType,
+            start: start,
+            end: end,
+            source: 'manual',
+            status: 'approved',
+            attributes: {},
+            confidence: 1.0
+        };
+
+        annotations.push(annotation);
+
+        // Update UI
+        updateAnnotationDisplay();
+        updateAnnotationList();
+        updateStats();
+    }
+
+    function updateAnnotationDisplay() {
+        const annotationText = document.getElementById('annotationText');
+
+        // Sort annotations by start position
+        const sortedAnnotations = [...annotations].sort((a, b) => a.start - b.start);
+
+        let html = '';
+        let lastPos = 0;
+
+        sortedAnnotations.forEach((ann, index) => {
+            // Add plain text before this annotation (escaped for HTML)
+            if (ann.start > lastPos) {
+                html += escapeHtml(currentText.substring(lastPos, ann.start));
+            }
+
+            const entityClass = `entity-${ann.label} entity-highlight`;
+            html += `<span class="${entityClass}" data-annotation-index="${index}" title="${escapeHtml(ann.label)}: ${escapeHtml(ann.text)}">${escapeHtml(ann.text)}</span>`;
+
+            lastPos = ann.end;
+        });
+
+        // Add remaining text after last annotation
+        if (lastPos < currentText.length) {
+            html += escapeHtml(currentText.substring(lastPos));
+        }
+
+        annotationText.innerHTML = html;
+    }
+
+    function updateAnnotationList() {
+        const annotationList = document.getElementById('annotationList');
+        const annotationCount = document.getElementById('annotationCount');
+
+        annotationCount.textContent = annotations.length;
+
+        if (annotations.length === 0) {
+            annotationList.innerHTML = '<div class="text-center text-muted">No annotations yet. Select text above to start.</div>';
+            return;
+        }
+
+        let html = '';
+        annotations.forEach((ann, index) => {
+            const colorMap = {
+                'SYMPTOM': '#FF6B6B',
+                'DISEASE': '#FFB74D',
+                'BODY_PART': '#4ECDC4',
+                'MEDICATION': '#45B7D1',
+                'PROCEDURE': '#A29BFE'
+            };
+
+            const color = colorMap[ann.label] || '#999999';
+
+            // Create entity type dropdown
+            const entityTypes = ['SYMPTOM', 'DISEASE', 'BODY_PART', 'MEDICATION', 'PROCEDURE'];
+            const typeDropdown = `
+                <select class="form-select form-select-sm d-inline-block entity-type-select"
+                        onchange="changeAnnotationType(${index}, this.value)"
+                        style="width: auto; vertical-align: middle;">
+                    ${entityTypes.map(type =>
+                        `<option value="${type}" ${ann.label === type ? 'selected' : ''}>${type}</option>`
+                    ).join('')}
+                </select>
+            `;
+
+            html += `
+                <div class="annotation-item" style="border-left-color: ${color};">
+                    <div style="flex: 1;">
+                        <div class="d-flex align-items-center gap-2 mb-1">
+                            <span class="annotation-text-span">"${ann.text}"</span>
+                            ${typeDropdown}
+                        </div>
+                    </div>
+                    <div class="annotation-actions">
+                        <button type="button" class="btn btn-sm btn-outline-danger" onclick="removeAnnotation(${index})" title="Delete annotation">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                </div>
+            `;
+        });
+
+        annotationList.innerHTML = html;
+    }
+
+    function changeAnnotationType(index, newType) {
+        if (annotations[index]) {
+            annotations[index].label = newType;
+            // Update the display and list to reflect the change
+            updateAnnotationDisplay();
+            updateAnnotationList();
+            updateStats();
+        }
+    }
+
+    function removeAnnotation(index) {
+        const removed = annotations[index];
+        if (removed) {
+            deletionHistory.push({
+                ...removed,
+                deleted_at: new Date().toISOString()
+            });
+        }
+        annotations.splice(index, 1);
+        updateAnnotationDisplay();
+        updateAnnotationList();
+        updateStats();
+    }
+
+    function clearAnnotations() {
+        if (annotations.length > 0 && !confirm('Are you sure you want to clear all annotations?')) {
+            return;
+        }
+
+        // Track all cleared annotations
+        annotations.forEach(ann => {
+            deletionHistory.push({
+                ...ann,
+                deleted_at: new Date().toISOString(),
+                deleted_via: 'clear_all'
+            });
+        });
+
+        annotations = [];
+        updateAnnotationDisplay();
+        updateAnnotationList();
+        updateStats();
+    }
+
+    function updateStats() {
+        document.getElementById('totalEntities').textContent = annotations.length;
+
+        const entityTypes = new Set(annotations.map(a => a.label));
+        document.getElementById('entityTypes').textContent = entityTypes.size;
+    }
+
+    function setSaveLoading(loading) {
+        const btn = document.getElementById('saveBtn');
+        const feedback = document.getElementById('saveFeedback');
+        if (loading) {
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Saving...';
+            feedback.style.display = 'none';
+            showOverlay('saving');
+        } else {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-save me-2"></i>Save Manual Annotations';
+        }
+    }
+
+    function showOverlay(state, errorMsg) {
+        const overlay = document.getElementById('saveOverlay');
+        const spinner = document.getElementById('overlaySpinner');
+        const success = document.getElementById('overlaySuccess');
+        const error = document.getElementById('overlayError');
+        spinner.style.display = state === 'saving' ? 'block' : 'none';
+        success.style.display = state === 'success' ? 'block' : 'none';
+        error.style.display = state === 'error' ? 'block' : 'none';
+        if (state === 'error') {
+            document.getElementById('overlayErrorMsg').textContent = errorMsg || 'Unknown error';
+        }
+        if (state === 'success') {
+            const bar = document.getElementById('overlayProgressBar');
+            bar.style.width = '0%';
+            requestAnimationFrame(() => { bar.style.transition = 'width 1.4s linear'; bar.style.width = '100%'; });
+        }
+        overlay.style.display = 'flex';
+    }
+
+    function hideOverlay() {
+        document.getElementById('saveOverlay').style.display = 'none';
+    }
+
+    function showSaveFeedback(type, message, detail) {
+        const feedback = document.getElementById('saveFeedback');
+        const colors = { success: 'success', info: 'info', warning: 'warning', error: 'danger' };
+        const icons = { success: 'check-circle', info: 'info-circle', warning: 'exclamation-triangle', error: 'times-circle' };
+        feedback.innerHTML = '<div class="alert alert-' + colors[type] + ' py-2 px-3 mb-0 small">' +
+            '<i class="fas fa-' + icons[type] + ' me-1"></i> <strong>' + message + '</strong>' +
+            (detail ? '<br>' + detail : '') +
+            '</div>';
+        feedback.style.display = 'block';
+    }
+
+    function saveAnnotations() {
+        if (annotations.length === 0) {
+            showSaveFeedback('warning', 'Nothing to save', 'Please create some annotations first.');
+            return;
+        }
+
+        const csrfEl = document.querySelector('[name=csrfmiddlewaretoken]');
+        if (!csrfEl) {
+            showSaveFeedback('error', 'CSRF token not found', 'Please refresh the page and try again.');
+            return;
+        }
+
+        setSaveLoading(true);
+
+        fetch('{% url "annotation:manual_annotate" document.id %}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrfEl.value
+            },
+            body: JSON.stringify({
+                annotations: annotations,
+                annotation_id: annotationId,
+                deletion_history: deletionHistory
+            })
+        })
+        .then(response => {
+            if (!response.ok) throw new Error('Server returned ' + response.status);
+            return response.json();
+        })
+        .then(data => {
+            if (data.success) {
+                const g = data.gamification;
+                showOverlay('success');
+                document.getElementById('saveBtn').disabled = true;
+                if (g && !g.is_status_only) {
+                    showGamificationToast(data);
+                    setTimeout(function() {
+                        window.location.href = '{% url "annotation:annotator_documents" %}';
+                    }, 3000);
+                } else {
+                    setTimeout(function() {
+                        window.location.href = '{% url "annotation:annotator_documents" %}';
+                    }, 1500);
+                }
+            } else {
+                showOverlay('error', data.error || 'Unknown error');
+                document.getElementById('saveBtn').disabled = false;
+                document.getElementById('saveBtn').innerHTML = '<i class="fas fa-save me-2"></i>Save Manual Annotations';
+            }
+        })
+        .catch(error => {
+            console.error('Save error:', error);
+            showOverlay('error', error.message);
+            document.getElementById('saveBtn').disabled = false;
+            document.getElementById('saveBtn').innerHTML = '<i class="fas fa-save me-2"></i>Save Manual Annotations';
+        });
+    }
+</script>
+{% endblock %}
+
+{% block extra_js %}
+<!-- CSRF Token for AJAX -->
+<input type="hidden" name="csrfmiddlewaretoken" value="{{ csrf_token }}">
+{% endblock %}

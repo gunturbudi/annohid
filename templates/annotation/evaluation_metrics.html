@@ -1,0 +1,352 @@
+{% extends 'base.html' %}
+
+{% block title %}Evaluation Metrics Dashboard{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row">
+        <div class="col-12">
+            <h2>Evaluation Metrics Dashboard</h2>
+            <p class="text-muted">Inter-annotator agreement, accuracy metrics, and efficiency statistics</p>
+        </div>
+    </div>
+
+    <!-- Summary Statistics -->
+    <div class="row mt-4">
+        <div class="col-md-3">
+            <div class="card text-center">
+                <div class="card-body">
+                    <h5 class="card-title">Gold Standards</h5>
+                    <h2 class="text-primary">{{ total_gold_standards }}</h2>
+                    <p class="text-muted mb-0">Expert-validated annotations</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center">
+                <div class="card-body">
+                    <h5 class="card-title">Average Cohen's Kappa</h5>
+                    <h2 class="text-success">{{ avg_kappa|floatformat:3 }}</h2>
+                    <p class="text-muted mb-0">Inter-annotator agreement</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center">
+                <div class="card-body">
+                    <h5 class="card-title">Average F1 Score</h5>
+                    <h2 class="text-info">{{ avg_f1|floatformat:3 }}</h2>
+                    <p class="text-muted mb-0">Annotation accuracy</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center">
+                <div class="card-body">
+                    <h5 class="card-title">Avg Time per Annotation</h5>
+                    <h2 class="text-warning">{{ avg_time_minutes|floatformat:1 }}</h2>
+                    <p class="text-muted mb-0">Minutes</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Accuracy Metrics Detail -->
+    <div class="row mt-4">
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Precision</h5>
+                    <div class="progress" style="height: 30px;">
+                        <div class="progress-bar bg-success" role="progressbar"
+                             style="width: {{ avg_precision|floatformat:0 }}%;"
+                             aria-valuenow="{{ avg_precision|floatformat:0 }}"
+                             aria-valuemin="0" aria-valuemax="100">
+                            {{ avg_precision|floatformat:3 }}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Recall</h5>
+                    <div class="progress" style="height: 30px;">
+                        <div class="progress-bar bg-info" role="progressbar"
+                             style="width: {{ avg_recall|floatformat:0 }}%;"
+                             aria-valuenow="{{ avg_recall|floatformat:0 }}"
+                             aria-valuemin="0" aria-valuemax="100">
+                            {{ avg_recall|floatformat:3 }}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">F1 Score</h5>
+                    <div class="progress" style="height: 30px;">
+                        <div class="progress-bar bg-primary" role="progressbar"
+                             style="width: {{ avg_f1|floatformat:0 }}%;"
+                             aria-valuenow="{{ avg_f1|floatformat:0 }}"
+                             aria-valuemin="0" aria-valuemax="100">
+                            {{ avg_f1|floatformat:3 }}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Calculate Metrics Tools -->
+    <div class="row mt-4">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0">Calculate Inter-Annotator Agreement</h5>
+                </div>
+                <div class="card-body">
+                    <form id="calculateAgreementForm">
+                        {% csrf_token %}
+                        <div class="mb-3">
+                            <label for="agreementDocument" class="form-label">Document</label>
+                            <select class="form-select" id="agreementDocument" name="document_id" required>
+                                <option value="">Select a document...</option>
+                                {% for doc in documents_with_gold %}
+                                    <option value="{{ doc.id }}">{{ doc.title }} (ID: {{ doc.id }})</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label for="annotator1" class="form-label">Annotator 1</label>
+                            <select class="form-select" id="annotator1" name="annotator1_id" required>
+                                <option value="">Select annotator...</option>
+                                {% for annotator in annotators %}
+                                    <option value="{{ annotator.id }}">{{ annotator.get_full_name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label for="annotator2" class="form-label">Annotator 2</label>
+                            <select class="form-select" id="annotator2" name="annotator2_id" required>
+                                <option value="">Select annotator...</option>
+                                {% for annotator in annotators %}
+                                    <option value="{{ annotator.id }}">{{ annotator.get_full_name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label for="taskType" class="form-label">Task Type</label>
+                            <select class="form-select" id="taskType" name="task_type">
+                                <option value="ner">Named Entity Recognition</option>
+                                <option value="mcn">Medical Concept Normalization</option>
+                            </select>
+                        </div>
+                        <button type="submit" class="btn btn-primary">Calculate Agreement</button>
+                    </form>
+                    <div id="agreementResult" class="mt-3"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header bg-success text-white">
+                    <h5 class="mb-0">View Performance Reports</h5>
+                </div>
+                <div class="card-body">
+                    <p>View detailed performance reports for individual annotators:</p>
+                    <div class="list-group">
+                        {% for annotator in annotators %}
+                            <a href="{% url 'annotation:annotator_performance_detail' annotator.id %}"
+                               class="list-group-item list-group-item-action">
+                                {{ annotator.get_full_name }}
+                                <span class="badge bg-secondary float-end">View Report</span>
+                            </a>
+                        {% endfor %}
+                    </div>
+                    <a href="{% url 'annotation:annotator_performance_report' %}"
+                       class="btn btn-success mt-3 w-100">
+                        View All Annotators Report
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent Agreements -->
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header bg-secondary text-white">
+                    <h5 class="mb-0">Recent Agreement Calculations</h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>Document</th>
+                                    <th>Annotator 1</th>
+                                    <th>Annotator 2</th>
+                                    <th>Task Type</th>
+                                    <th>Cohen's Kappa</th>
+                                    <th>Agreement Level</th>
+                                    <th>Percent Agreement</th>
+                                    <th>Calculated</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for agreement in recent_agreements %}
+                                    <tr>
+                                        <td>{{ agreement.document.title|truncatewords:5 }}</td>
+                                        <td>{{ agreement.annotator1.get_full_name }}</td>
+                                        <td>{{ agreement.annotator2.get_full_name }}</td>
+                                        <td>{{ agreement.get_task_type_display }}</td>
+                                        <td><strong>{{ agreement.cohens_kappa|floatformat:3 }}</strong></td>
+                                        <td>
+                                            <span class="badge
+                                                {% if agreement.cohens_kappa >= 0.8 %}bg-success
+                                                {% elif agreement.cohens_kappa >= 0.6 %}bg-info
+                                                {% elif agreement.cohens_kappa >= 0.4 %}bg-warning
+                                                {% else %}bg-danger{% endif %}">
+                                                {{ agreement.get_agreement_level }}
+                                            </span>
+                                        </td>
+                                        <td>{{ agreement.percent_agreement|floatformat:1 }}%</td>
+                                        <td>{{ agreement.calculated_at|date:"Y-m-d H:i" }}</td>
+                                    </tr>
+                                {% empty %}
+                                    <tr>
+                                        <td colspan="8" class="text-center">No agreement calculations yet</td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent Metrics -->
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header bg-info text-white">
+                    <h5 class="mb-0">Recent Accuracy Metrics</h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>Annotator</th>
+                                    <th>Document</th>
+                                    <th>Precision</th>
+                                    <th>Recall</th>
+                                    <th>F1 Score</th>
+                                    <th>Time</th>
+                                    <th>Calculated</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for metric in recent_metrics %}
+                                    <tr>
+                                        <td>{{ metric.annotation_result.annotator.get_full_name }}</td>
+                                        <td>{{ metric.annotation_result.document.title|truncatewords:5 }}</td>
+                                        <td>{{ metric.precision|floatformat:3 }}</td>
+                                        <td>{{ metric.recall|floatformat:3 }}</td>
+                                        <td><strong>{{ metric.f1_score|floatformat:3 }}</strong></td>
+                                        <td>{{ metric.get_annotation_time_display }}</td>
+                                        <td>{{ metric.calculated_at|date:"Y-m-d H:i" }}</td>
+                                    </tr>
+                                {% empty %}
+                                    <tr>
+                                        <td colspan="7" class="text-center">No metrics calculated yet</td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Export Data -->
+    <div class="row mt-4 mb-5">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header bg-dark text-white">
+                    <h5 class="mb-0">Export Metrics Data</h5>
+                </div>
+                <div class="card-body">
+                    <p>Export evaluation metrics for further analysis:</p>
+                    <div class="btn-group" role="group">
+                        <a href="{% url 'annotation:export_metrics_data' %}?type=all&format=json"
+                           class="btn btn-primary" target="_blank">
+                            Export All (JSON)
+                        </a>
+                        <a href="{% url 'annotation:export_metrics_data' %}?type=agreement&format=json"
+                           class="btn btn-secondary" target="_blank">
+                            Agreement Only
+                        </a>
+                        <a href="{% url 'annotation:export_metrics_data' %}?type=accuracy&format=json"
+                           class="btn btn-success" target="_blank">
+                            Accuracy Only
+                        </a>
+                        <a href="{% url 'annotation:export_metrics_data' %}?type=efficiency&format=json"
+                           class="btn btn-info" target="_blank">
+                            Efficiency Only
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.getElementById('calculateAgreementForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+
+    const formData = new FormData(this);
+    const resultDiv = document.getElementById('agreementResult');
+
+    resultDiv.innerHTML = '<div class="alert alert-info">Calculating agreement...</div>';
+
+    fetch('{% url "annotation:calculate_agreement" %}', {
+        method: 'POST',
+        body: formData,
+        headers: {
+            'X-CSRFToken': formData.get('csrfmiddlewaretoken')
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            const agreement = data.agreement;
+            resultDiv.innerHTML = `
+                <div class="alert alert-success">
+                    <h5>Agreement Calculated Successfully!</h5>
+                    <hr>
+                    <p><strong>Cohen's Kappa:</strong> ${agreement.cohens_kappa}</p>
+                    <p><strong>Agreement Level:</strong> ${agreement.agreement_level}</p>
+                    <p><strong>Percent Agreement:</strong> ${agreement.percent_agreement}%</p>
+                    <p><strong>Agreed Entities:</strong> ${agreement.agreed_entities}</p>
+                    <p><strong>Disagreed Entities:</strong> ${agreement.disagreed_entities}</p>
+                </div>
+            `;
+        } else {
+            resultDiv.innerHTML = `<div class="alert alert-danger">${data.error}</div>`;
+        }
+    })
+    .catch(error => {
+        resultDiv.innerHTML = `<div class="alert alert-danger">Error: ${error.message}</div>`;
+    });
+});
+</script>
+{% endblock %}

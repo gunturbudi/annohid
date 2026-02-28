@@ -1,0 +1,344 @@
+{% extends 'base.html' %}
+
+{% block title %}LLM Annotation - AnnoHID{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h2>🤖 LLM Document Annotation</h2>
+            <div>
+                <a href="{% url 'annotation:document_detail' document.id %}" class="btn btn-outline-secondary">
+                    ← Back to Document
+                </a>
+                <a href="{% url 'annotation:annotation_results_list' %}" class="btn btn-outline-info">
+                    📊 All Annotations
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- API Status Check -->
+<div class="alert {% if api_status.ready_for_annotation %}alert-success{% else %}alert-warning{% endif %}">
+    <h5>{% if api_status.ready_for_annotation %}✅ API Configuration Ready{% else %}⚠️ API Configuration Required{% endif %}</h5>
+    <p>LLM annotation status:</p>
+    <ul>
+        <li>LangExtract Available: {% if api_status.langextract_available %}✅{% else %}❌ (Using Mock for Testing){% endif %}</li>
+        <li>Google API Key: {% if api_status.google_api_key_set %}✅{% else %}❌{% endif %}</li>
+        <li>DeepSeek API Key: {% if api_status.deepseek_api_key_set %}✅{% else %}❌{% endif %}</li>
+        <li>LangExtract API Key: {% if api_status.langextract_api_key_set %}✅{% else %}❌{% endif %}</li>
+    </ul>
+    {% if api_status.ready_for_annotation %}
+        {% if not api_status.langextract_available %}
+        <p class="mb-0"><strong>Note:</strong> Using mock LangExtract implementation for testing. For production, upgrade to Python 3.10+ and install real LangExtract.</p>
+        {% else %}
+        <p class="mb-0"><strong>Ready for annotation!</strong> All systems configured properly.</p>
+        {% endif %}
+    {% else %}
+    <p class="mb-0">Please set your <code>GOOGLE_API_KEY</code> or <code>DEEPSEEK_API_KEY</code> environment variable.</p>
+    {% endif %}
+</div>
+
+<div class="row">
+    <!-- Document Content -->
+    <div class="col-lg-8">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">📄 Document Content</h5>
+            </div>
+            <div class="card-body">
+                <div class="border rounded p-3 bg-light mb-3">
+                    <p class="mb-0" style="white-space: pre-wrap; line-height: 1.6;" id="document-text">{{ document.content }}</p>
+                </div>
+
+                <div class="row">
+                    <div class="col-md-6">
+                        <small class="text-muted">Word Count: {{ document.word_count }}</small>
+                    </div>
+                    <div class="col-md-6">
+                        <small class="text-muted">Character Count: {{ document.character_count }}</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Annotation Results -->
+        <div class="card mt-4" id="annotation-results" style="display: none;">
+            <div class="card-header">
+                <h5 class="card-title mb-0">🎯 Annotation Results</h5>
+            </div>
+            <div class="card-body">
+                <div id="results-content">
+                    <!-- Results will be populated here -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Entity Visualization -->
+        <div class="card mt-4" id="entity-visualization" style="display: none;">
+            <div class="card-header">
+                <h5 class="card-title mb-0">🔍 Entity Visualization</h5>
+            </div>
+            <div class="card-body">
+                <div id="visualization-content">
+                    <!-- Visualization will be populated here -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Annotation Panel -->
+    <div class="col-lg-4">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">⚙️ Annotation Settings</h5>
+            </div>
+            <div class="card-body">
+                <form id="annotation-form">
+                    {% csrf_token %}
+                    <div class="mb-3">
+                        <label class="form-label">LLM Model</label>
+                        <select name="model" class="form-select" id="model-select">
+                            {% for model in available_models %}
+                            <option value="{{ model }}" {% if model == default_model %}selected{% endif %}>
+                                {{ model }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                        <div class="form-text">Choose the LLM model for entity extraction</div>
+                    </div>
+
+                    <div class="d-grid">
+                        <button type="submit" class="btn btn-success" {% if not api_status.ready_for_annotation %}disabled{% endif %}>
+                            <span class="spinner-border spinner-border-sm me-2" style="display: none;" id="annotation-spinner"></span>
+                            🤖 Start Annotation
+                        </button>
+                    </div>
+                </form>
+
+                <div class="mt-3">
+                    <h6 class="text-muted">Entity Types</h6>
+                    <div class="d-flex flex-wrap gap-1">
+                        <span class="badge bg-primary">SYMPTOM</span>
+                        <span class="badge bg-success">DISEASE</span>
+                        <span class="badge bg-info">BODY_PART</span>
+                        <span class="badge bg-warning">MEDICATION</span>
+                        <span class="badge bg-secondary">PROCEDURE</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Existing Annotations -->
+        {% if existing_annotations %}
+        <div class="card mt-4">
+            <div class="card-header">
+                <h5 class="card-title mb-0">📋 Previous Annotations</h5>
+            </div>
+            <div class="card-body">
+                {% for annotation in existing_annotations %}
+                <div class="border rounded p-2 mb-2">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <strong>{{ annotation.model_used }}</strong>
+                            <span class="badge bg-{% if annotation.review_status == 'approved' %}success{% elif annotation.review_status == 'rejected' %}danger{% else %}warning{% endif %}">
+                                {{ annotation.get_review_status_display }}
+                            </span>
+                        </div>
+                        <small class="text-muted">{{ annotation.created_at|date:"M d, H:i" }}</small>
+                    </div>
+                    <div class="mt-1">
+                        <small class="text-muted">
+                            {{ annotation.total_entities }} entities
+                            {% if annotation.confidence_score %}
+                            • {{ annotation.confidence_score|floatformat:2 }} confidence
+                            {% endif %}
+                        </small>
+                    </div>
+                    <div class="mt-2">
+                        <a href="{% url 'annotation:view_annotation_result' annotation.id %}" class="btn btn-outline-primary btn-sm">
+                            View Details
+                        </a>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Statistics -->
+        <div class="card mt-4">
+            <div class="card-header">
+                <h5 class="card-title mb-0">📊 Document Info</h5>
+            </div>
+            <div class="card-body">
+                <div class="row text-center">
+                    <div class="col-6">
+                        <h6 class="text-primary">{{ document.word_count }}</h6>
+                        <small class="text-muted">Words</small>
+                    </div>
+                    <div class="col-6">
+                        <h6 class="text-info">{{ existing_annotations|length }}</h6>
+                        <small class="text-muted">Annotations</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const annotationForm = document.getElementById('annotation-form');
+    const annotationSpinner = document.getElementById('annotation-spinner');
+    const resultsCard = document.getElementById('annotation-results');
+    const resultsContent = document.getElementById('results-content');
+    const visualizationCard = document.getElementById('entity-visualization');
+    const visualizationContent = document.getElementById('visualization-content');
+
+    annotationForm.addEventListener('submit', function(e) {
+        e.preventDefault();
+
+        const model = document.getElementById('model-select').value;
+
+        // Show loading state
+        annotationSpinner.style.display = 'inline-block';
+        this.querySelector('button[type="submit"]').disabled = true;
+        this.querySelector('button[type="submit"]').innerHTML =
+            '<span class="spinner-border spinner-border-sm me-2"></span>Processing...';
+
+        // Hide previous results
+        resultsCard.style.display = 'none';
+        visualizationCard.style.display = 'none';
+
+        fetch('{% url "annotation:perform_annotation" document.id %}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+            },
+            body: JSON.stringify({
+                model: model
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Show success results
+                displayAnnotationResults(data);
+                displayEntityVisualization(data);
+
+                // Show success message
+                showAlert('success', `Annotation completed! Found ${data.total_entities} entities using ${data.model_used}`);
+            } else {
+                showAlert('danger', 'Error: ' + data.error);
+                console.error('Annotation failed:', data);
+            }
+        })
+        .catch(error => {
+            console.error('Annotation error:', error);
+            showAlert('danger', 'Annotation failed. Please try again.');
+        })
+        .finally(() => {
+            // Reset form state
+            annotationSpinner.style.display = 'none';
+            this.querySelector('button[type="submit"]').disabled = false;
+            this.querySelector('button[type="submit"]').innerHTML = '🤖 Start Annotation';
+        });
+    });
+
+    function displayAnnotationResults(data) {
+        const entityStats = data.entity_stats || {};
+        const processingTime = (data.processing_time || 0).toFixed(2);
+
+        let statsHtml = '<div class="row text-center mb-3">';
+        statsHtml += `<div class="col-md-3"><h6 class="text-primary">${data.total_entities}</h6><small>Total Entities</small></div>`;
+        statsHtml += `<div class="col-md-3"><h6 class="text-success">${processingTime}s</h6><small>Processing Time</small></div>`;
+        statsHtml += `<div class="col-md-3"><h6 class="text-info">${(data.confidence_score || 0).toFixed(2)}</h6><small>Avg Confidence</small></div>`;
+        statsHtml += `<div class="col-md-3"><h6 class="text-warning">${Object.keys(entityStats).length}</h6><small>Entity Types</small></div>`;
+        statsHtml += '</div>';
+
+        let entitiesHtml = '<h6>Entity Breakdown:</h6>';
+        Object.entries(entityStats).forEach(([type, count]) => {
+            const badgeClass = getBadgeClass(type);
+            entitiesHtml += `<span class="badge ${badgeClass} me-1 mb-1">${type}: ${count}</span>`;
+        });
+
+        entitiesHtml += '<div class="mt-3">';
+        entitiesHtml += `<a href="{% url 'annotation:view_annotation_result' 0 %}".replace('0', data.annotation_id) class="btn btn-primary btn-sm me-2">View Full Results</a>`;
+        entitiesHtml += '<button class="btn btn-outline-secondary btn-sm" onclick="window.location.reload()">Annotate Again</button>';
+        entitiesHtml += '</div>';
+
+        resultsContent.innerHTML = statsHtml + entitiesHtml;
+        resultsCard.style.display = 'block';
+    }
+
+    function displayEntityVisualization(data) {
+        const documentText = document.getElementById('document-text').textContent;
+        const entities = data.entities || [];
+
+        // Simple entity highlighting
+        let highlightedText = documentText;
+        let offset = 0;
+
+        // Sort entities by start position to avoid overlapping issues
+        entities.sort((a, b) => a.start - b.start);
+
+        entities.forEach(entity => {
+            const start = entity.start + offset;
+            const end = entity.end + offset;
+            const badgeClass = getBadgeClass(entity.label);
+            const entityHtml = `<span class="badge ${badgeClass}" title="${entity.label}: ${entity.text}">${entity.text}</span>`;
+
+            highlightedText = highlightedText.slice(0, start) + entityHtml + highlightedText.slice(end);
+            offset += entityHtml.length - (entity.end - entity.start);
+        });
+
+        visualizationContent.innerHTML = `
+            <div class="border rounded p-3 bg-light" style="white-space: pre-wrap; line-height: 2;">
+                ${highlightedText}
+            </div>
+            <div class="mt-2">
+                <small class="text-muted">Entities are highlighted by type. Hover for details.</small>
+            </div>
+        `;
+
+        visualizationCard.style.display = 'block';
+    }
+
+    function getBadgeClass(entityType) {
+        const typeClasses = {
+            'SYMPTOM': 'bg-primary',
+            'DISEASE': 'bg-success',
+            'BODY_PART': 'bg-info',
+            'MEDICATION': 'bg-warning',
+            'PROCEDURE': 'bg-secondary'
+        };
+        return typeClasses[entityType] || 'bg-dark';
+    }
+
+    function showAlert(type, message) {
+        const alertDiv = document.createElement('div');
+        alertDiv.className = `alert alert-${type} alert-dismissible fade show`;
+        alertDiv.innerHTML = `
+            ${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        `;
+
+        // Insert at the top of the content
+        const content = document.querySelector('main');
+        content.insertBefore(alertDiv, content.firstChild);
+
+        // Auto-dismiss after 5 seconds
+        setTimeout(() => {
+            if (alertDiv.parentNode) {
+                alertDiv.remove();
+            }
+        }, 5000);
+    }
+});
+</script>
+{% endblock %}

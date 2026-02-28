@@ -1,0 +1,287 @@
+{% extends 'base.html' %}
+
+{% block title %}Time Analytics{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h1 class="h3">Time Analytics</h1>
+                <a href="{% url 'annotation:admin_data_management' %}" class="btn btn-secondary">
+                    <i class="fas fa-arrow-left"></i> Back to Data Management
+                </a>
+            </div>
+
+            <!-- Filter Options -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">Filter Options</h5>
+                </div>
+                <div class="card-body">
+                    <form method="get" class="row g-3">
+                        <div class="col-md-3">
+                            <label for="annotator" class="form-label">Annotator</label>
+                            <select name="annotator" id="annotator" class="form-select">
+                                <option value="">All Annotators</option>
+                                {% for annotator in annotators %}
+                                    <option value="{{ annotator.id }}" {% if selected_annotator == annotator.id|stringformat:"s" %}selected{% endif %}>
+                                        {{ annotator.username }}
+                                    </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label for="task_type" class="form-label">Task Type</label>
+                            <select name="task_type" id="task_type" class="form-select">
+                                <option value="">All Tasks</option>
+                                <option value="ner" {% if selected_task_type == "ner" %}selected{% endif %}>NER</option>
+                                <option value="mcn" {% if selected_task_type == "mcn" %}selected{% endif %}>MCN</option>
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <label for="date_from" class="form-label">From Date</label>
+                            <input type="date" name="date_from" id="date_from" class="form-control" value="{{ date_from }}">
+                        </div>
+                        <div class="col-md-2">
+                            <label for="date_to" class="form-label">To Date</label>
+                            <input type="date" name="date_to" id="date_to" class="form-control" value="{{ date_to }}">
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label">&nbsp;</label>
+                            <button type="submit" class="btn btn-primary d-block w-100">Apply Filters</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Overall Statistics -->
+            <div class="row mb-4">
+                <div class="col-md-6">
+                    <div class="card">
+                        <div class="card-header bg-primary text-white">
+                            <h5 class="card-title mb-0">
+                                <i class="fas fa-eye"></i> NER Statistics
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-6">
+                                    <h6 class="text-muted">Total Tasks</h6>
+                                    <h4 class="text-primary">{{ ner_stats.total_tasks }}</h4>
+                                </div>
+                                <div class="col-6">
+                                    <h6 class="text-muted">Total Time</h6>
+                                    <h4 class="text-primary">{{ ner_stats.total_time_minutes|floatformat:1 }} min</h4>
+                                </div>
+                            </div>
+                            <hr>
+                            <div class="row">
+                                <div class="col-6">
+                                    <small class="text-muted">Average per task</small><br>
+                                    <strong>{{ ner_stats.average_time_minutes|floatformat:1 }} min</strong>
+                                </div>
+                                <div class="col-6">
+                                    <small class="text-muted">Range</small><br>
+                                    <strong>{{ ner_stats.min_time_minutes|floatformat:1 }} - {{ ner_stats.max_time_minutes|floatformat:1 }} min</strong>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="card">
+                        <div class="card-header bg-success text-white">
+                            <h5 class="card-title mb-0">
+                                <i class="fas fa-search"></i> MCN Statistics
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-6">
+                                    <h6 class="text-muted">Total Tasks</h6>
+                                    <h4 class="text-success">{{ mcn_stats.total_tasks }}</h4>
+                                </div>
+                                <div class="col-6">
+                                    <h6 class="text-muted">Total Time</h6>
+                                    <h4 class="text-success">{{ mcn_stats.total_time_minutes|floatformat:1 }} min</h4>
+                                </div>
+                            </div>
+                            <hr>
+                            <div class="row">
+                                <div class="col-6">
+                                    <small class="text-muted">Average per task</small><br>
+                                    <strong>{{ mcn_stats.average_time_minutes|floatformat:1 }} min</strong>
+                                </div>
+                                <div class="col-6">
+                                    <small class="text-muted">Range</small><br>
+                                    <strong>{{ mcn_stats.min_time_minutes|floatformat:1 }} - {{ mcn_stats.max_time_minutes|floatformat:1 }} min</strong>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Comparison Chart -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">NER vs MCN Time Comparison</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <canvas id="taskTimeChart" width="400" height="200"></canvas>
+                        </div>
+                        <div class="col-md-6">
+                            <h6>Key Insights</h6>
+                            <ul class="list-unstyled">
+                                <li>
+                                    <i class="fas fa-clock text-info"></i>
+                                    <strong>Total Time Ratio:</strong>
+                                    {% if ner_stats.total_time_minutes > 0 and mcn_stats.total_time_minutes > 0 %}
+                                        NER:MCN = {{ ner_stats.total_time_minutes|floatformat:0 }}:{{ mcn_stats.total_time_minutes|floatformat:0 }}
+                                    {% else %}
+                                        Insufficient data
+                                    {% endif %}
+                                </li>
+                                <li>
+                                    <i class="fas fa-chart-line text-success"></i>
+                                    <strong>Average Time Difference:</strong>
+                                    {% if ner_stats.average_time_minutes > 0 and mcn_stats.average_time_minutes > 0 %}
+                                        {{ ner_stats.average_time_minutes|sub:mcn_stats.average_time_minutes|floatformat:1 }} min
+                                        {% if ner_stats.average_time_minutes > mcn_stats.average_time_minutes %}
+                                            (NER takes longer)
+                                        {% else %}
+                                            (MCN takes longer)
+                                        {% endif %}
+                                    {% else %}
+                                        Insufficient data
+                                    {% endif %}
+                                </li>
+                                <li>
+                                    <i class="fas fa-tasks text-warning"></i>
+                                    <strong>Task Completion:</strong>
+                                    {{ ner_stats.total_tasks|add:mcn_stats.total_tasks }} total tasks completed
+                                </li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Individual Annotator Performance -->
+            {% if annotator_stats %}
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">Individual Annotator Performance</h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>Annotator</th>
+                                    <th>NER Tasks</th>
+                                    <th>NER Avg Time</th>
+                                    <th>MCN Tasks</th>
+                                    <th>MCN Avg Time</th>
+                                    <th>Total Time</th>
+                                    <th>Efficiency</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for stats in annotator_stats %}
+                                <tr>
+                                    <td>
+                                        <strong>{{ stats.annotator.username }}</strong>
+                                        {% if stats.annotator.id == selected_annotator|add:0 %}
+                                            <span class="badge bg-primary ms-1">Filtered</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>{{ stats.ner_stats.total_tasks }}</td>
+                                    <td>
+                                        {% if stats.ner_stats.average_time_minutes > 0 %}
+                                            {{ stats.ner_stats.average_time_minutes|floatformat:1 }} min
+                                        {% else %}
+                                            <span class="text-muted">N/A</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>{{ stats.mcn_stats.total_tasks }}</td>
+                                    <td>
+                                        {% if stats.mcn_stats.average_time_minutes > 0 %}
+                                            {{ stats.mcn_stats.average_time_minutes|floatformat:1 }} min
+                                        {% else %}
+                                            <span class="text-muted">N/A</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <strong>{{ stats.total_time|floatformat:1 }} min</strong>
+                                    </td>
+                                    <td>
+                                        {% if stats.total_tasks > 0 %}
+                                            <span class="badge bg-{% if stats.efficiency < 10 %}success{% elif stats.efficiency < 20 %}warning{% else %}danger{% endif %}">
+                                                {{ stats.efficiency|floatformat:1 }} min/task
+                                            </span>
+                                        {% else %}
+                                            <span class="text-muted">N/A</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+// Create task time comparison chart
+const ctx = document.getElementById('taskTimeChart').getContext('2d');
+const taskTimeChart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+        labels: ['Average Time per Task', 'Total Time'],
+        datasets: [{
+            label: 'NER',
+            data: [{{ ner_stats.average_time_minutes|default:0 }}, {{ ner_stats.total_time_minutes|default:0 }}],
+            backgroundColor: 'rgba(54, 162, 235, 0.8)',
+            borderColor: 'rgba(54, 162, 235, 1)',
+            borderWidth: 1
+        }, {
+            label: 'MCN',
+            data: [{{ mcn_stats.average_time_minutes|default:0 }}, {{ mcn_stats.total_time_minutes|default:0 }}],
+            backgroundColor: 'rgba(75, 192, 192, 0.8)',
+            borderColor: 'rgba(75, 192, 192, 1)',
+            borderWidth: 1
+        }]
+    },
+    options: {
+        responsive: true,
+        scales: {
+            y: {
+                beginAtZero: true,
+                title: {
+                    display: true,
+                    text: 'Time (minutes)'
+                }
+            }
+        },
+        plugins: {
+            legend: {
+                position: 'top',
+            },
+            title: {
+                display: true,
+                text: 'Task Time Comparison'
+            }
+        }
+    }
+});
+</script>
+{% endblock %}

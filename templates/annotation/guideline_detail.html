@@ -1,0 +1,305 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ guideline.title }} - AnnoHID{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h2 class="mb-0">📋 {{ guideline.title }}</h2>
+            <div class="btn-group" role="group">
+                {% if user.is_admin %}
+                <a href="{% url 'annotation:edit_guideline' guideline.id %}" class="btn btn-outline-success">
+                    ✏️ Edit
+                </a>
+                {% endif %}
+                <a href="{% url 'annotation:view_guidelines' %}" class="btn btn-secondary">
+                    ← Back to Guidelines
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Guideline Metadata -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card bg-light">
+            <div class="card-body">
+                <div class="row align-items-center">
+                    <div class="col-md-8">
+                        {% if guideline.description %}
+                        <p class="mb-2 text-muted">{{ guideline.description }}</p>
+                        {% endif %}
+                        <div class="d-flex align-items-center gap-3">
+                            <small class="text-muted">
+                                <strong>Created:</strong> {{ guideline.created_at|date:"M d, Y H:i" }}
+                            </small>
+                            <small class="text-muted">
+                                <strong>By:</strong> {{ guideline.uploaded_by.username }}
+                            </small>
+                            {% if guideline.updated_at != guideline.created_at %}
+                            <small class="text-muted">
+                                <strong>Updated:</strong> {{ guideline.updated_at|date:"M d, Y H:i" }}
+                            </small>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="col-md-4 text-end">
+                        {% if guideline.is_active %}
+                            <span class="badge bg-success fs-6">✅ Active</span>
+                        {% else %}
+                            <span class="badge bg-secondary fs-6">⏸️ Inactive</span>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Guideline Content -->
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">📖 Guideline Content</h5>
+            </div>
+            <div class="card-body">
+                <div class="guideline-content">
+                    {{ guideline.content|linebreaks }}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Action Buttons -->
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-body text-center">
+                <h6 class="card-title">🎯 Ready to Annotate?</h6>
+                <p class="card-text text-muted">
+                    Now that you've read the guidelines, you can start annotating your assigned documents.
+                </p>
+                <div class="btn-group" role="group">
+                    <a href="{% url 'annotation:annotator_documents' %}" class="btn btn-primary">
+                        📝 Go to My Documents
+                    </a>
+                    <button class="btn btn-outline-secondary" onclick="window.print()">
+                        🖨️ Print Guidelines
+                    </button>
+                    <button class="btn btn-outline-info" onclick="copyToClipboard()">
+                        📋 Copy to Clipboard
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Floating Action Buttons for Mobile -->
+<div class="fab-container d-md-none">
+    <a href="{% url 'annotation:annotator_documents' %}" class="fab fab-primary" title="Go to Documents">
+        📝
+    </a>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function copyToClipboard() {
+    const content = document.querySelector('.guideline-content').innerText;
+    const title = "{{ guideline.title|escapejs }}";
+    const fullContent = `${title}\n\n${content}`;
+
+    if (navigator.clipboard) {
+        navigator.clipboard.writeText(fullContent).then(function() {
+            showAlert('Guideline copied to clipboard!', 'success');
+        }, function(err) {
+            console.error('Could not copy text: ', err);
+            fallbackCopyTextToClipboard(fullContent);
+        });
+    } else {
+        fallbackCopyTextToClipboard(fullContent);
+    }
+}
+
+function fallbackCopyTextToClipboard(text) {
+    const textArea = document.createElement("textarea");
+    textArea.value = text;
+    textArea.style.top = "0";
+    textArea.style.left = "0";
+    textArea.style.position = "fixed";
+
+    document.body.appendChild(textArea);
+    textArea.focus();
+    textArea.select();
+
+    try {
+        const successful = document.execCommand('copy');
+        const msg = successful ? 'Guideline copied to clipboard!' : 'Failed to copy guideline';
+        showAlert(msg, successful ? 'success' : 'warning');
+    } catch (err) {
+        console.error('Fallback: Oops, unable to copy', err);
+        showAlert('Unable to copy to clipboard', 'warning');
+    }
+
+    document.body.removeChild(textArea);
+}
+
+function showAlert(message, type) {
+    const alertDiv = document.createElement('div');
+    alertDiv.className = `alert alert-${type} alert-dismissible fade show position-fixed`;
+    alertDiv.style.top = '20px';
+    alertDiv.style.right = '20px';
+    alertDiv.style.zIndex = '9999';
+    alertDiv.innerHTML = `
+        ${message}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    `;
+    document.body.appendChild(alertDiv);
+
+    setTimeout(() => {
+        if (alertDiv.parentNode) {
+            alertDiv.parentNode.removeChild(alertDiv);
+        }
+    }, 5000);
+}
+
+// Print styles
+const printStyles = `
+<style media="print">
+    .btn, .fab-container, .card-header, nav, .navbar { display: none !important; }
+    .card { border: none !important; box-shadow: none !important; }
+    .card-body { padding: 0 !important; }
+    .guideline-content { font-size: 12pt; line-height: 1.5; }
+    h1, h2, h3, h4, h5, h6 { page-break-after: avoid; }
+    p, ul, ol { page-break-inside: avoid; }
+    @page { margin: 2cm; }
+</style>
+`;
+
+// Add print styles to head
+document.head.insertAdjacentHTML('beforeend', printStyles);
+
+// Smooth scroll to content when page loads
+document.addEventListener('DOMContentLoaded', function() {
+    // Add reading progress indicator
+    const content = document.querySelector('.guideline-content');
+    const progressBar = document.createElement('div');
+    progressBar.id = 'reading-progress';
+    progressBar.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 0%;
+        height: 3px;
+        background: linear-gradient(to right, #0d6efd, #20c997);
+        z-index: 9999;
+        transition: width 0.3s ease;
+    `;
+    document.body.appendChild(progressBar);
+
+    window.addEventListener('scroll', function() {
+        const winScroll = document.body.scrollTop || document.documentElement.scrollTop;
+        const height = document.documentElement.scrollHeight - document.documentElement.clientHeight;
+        const scrolled = (winScroll / height) * 100;
+        progressBar.style.width = scrolled + '%';
+    });
+
+    // Highlight headings in content
+    const contentElement = document.querySelector('.guideline-content');
+    if (contentElement) {
+        const text = contentElement.innerHTML;
+        // Simple markdown-like formatting
+        const formattedText = text
+            .replace(/^### (.*$)/gim, '<h5 class="mt-4 mb-2 text-primary">$1</h5>')
+            .replace(/^## (.*$)/gim, '<h4 class="mt-4 mb-2 text-primary">$1</h4>')
+            .replace(/^# (.*$)/gim, '<h3 class="mt-4 mb-2 text-primary">$1</h3>')
+            .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+            .replace(/\*(.*?)\*/g, '<em>$1</em>');
+        contentElement.innerHTML = formattedText;
+    }
+});
+</script>
+
+<style>
+.guideline-content {
+    font-size: 1.1rem;
+    line-height: 1.7;
+    color: #333;
+}
+
+.guideline-content h3,
+.guideline-content h4,
+.guideline-content h5 {
+    margin-top: 2rem;
+    margin-bottom: 1rem;
+}
+
+.guideline-content p {
+    margin-bottom: 1rem;
+}
+
+.guideline-content ul,
+.guideline-content ol {
+    margin-bottom: 1rem;
+    padding-left: 2rem;
+}
+
+.guideline-content li {
+    margin-bottom: 0.5rem;
+}
+
+.fab-container {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    z-index: 1000;
+}
+
+.fab {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    text-decoration: none;
+    font-size: 24px;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+    transition: all 0.3s ease;
+}
+
+.fab-primary {
+    background-color: #0d6efd;
+    color: white;
+}
+
+.fab:hover {
+    transform: scale(1.1);
+    box-shadow: 0 6px 12px rgba(0,0,0,0.3);
+}
+
+.btn-group .btn {
+    margin: 0 2px;
+}
+
+@media (max-width: 768px) {
+    .guideline-content {
+        font-size: 1rem;
+    }
+
+    .btn-group {
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    .btn-group .btn {
+        margin: 5px 0;
+    }
+}
+</style>
+{% endblock %}

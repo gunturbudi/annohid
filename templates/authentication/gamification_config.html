@@ -1,0 +1,361 @@
+{% extends 'base.html' %}
+
+{% block title %}Gamification Settings - AnnoHID{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="d-flex justify-content-between align-items-center">
+            <h2 class="mb-0"><i class="fas fa-trophy text-warning"></i> Gamification Settings</h2>
+            <a href="{% url 'authentication:dashboard' %}" class="btn btn-outline-secondary">
+                <i class="fas fa-arrow-left"></i> Back to Dashboard
+            </a>
+        </div>
+    </div>
+</div>
+
+<!-- Summary Stats -->
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card bg-primary text-white text-center">
+            <div class="card-body py-3">
+                <h3 class="mb-0">{{ annotator_count }}</h3>
+                <small>Total Annotators</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-warning text-white text-center">
+            <div class="card-body py-3">
+                <h3 class="mb-0">{{ active_streaks }}</h3>
+                <small>Active Streaks</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-success text-white text-center">
+            <div class="card-body py-3">
+                <h3 class="mb-0">{{ achievement_count }}</h3>
+                <small>Achievements Earned</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-info text-white text-center">
+            <div class="card-body py-3">
+                <h3 class="mb-0">{{ avg_points }}</h3>
+                <small>Avg Points/User</small>
+            </div>
+        </div>
+    </div>
+</div>
+
+<form method="post" id="configForm">
+{% csrf_token %}
+
+<div class="row">
+    <!-- Left Column: Configuration -->
+    <div class="col-lg-8">
+
+        <!-- Point Values -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="fas fa-star text-warning"></i> Point Values</h5>
+            </div>
+            <div class="card-body">
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label">NER Completion</label>
+                        <div class="input-group">
+                            <input type="number" class="form-control" name="points_ner_complete" value="{{ config.points_ner_complete }}" min="0">
+                            <span class="input-group-text">pts</span>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">MCN Completion</label>
+                        <div class="input-group">
+                            <input type="number" class="form-control" name="points_mcn_complete" value="{{ config.points_mcn_complete }}" min="0">
+                            <span class="input-group-text">pts</span>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">First of Day Bonus</label>
+                        <div class="input-group">
+                            <input type="number" class="form-control" name="points_first_of_day" value="{{ config.points_first_of_day }}" min="0">
+                            <span class="input-group-text">pts</span>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Speed Bonus</label>
+                        <div class="input-group">
+                            <input type="number" class="form-control" name="points_speed_bonus" value="{{ config.points_speed_bonus }}" min="0">
+                            <span class="input-group-text">pts</span>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Quality Bonus</label>
+                        <div class="input-group">
+                            <input type="number" class="form-control" name="points_quality_bonus" value="{{ config.points_quality_bonus }}" min="0">
+                            <span class="input-group-text">pts</span>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Level Up Bonus</label>
+                        <div class="input-group">
+                            <input type="number" class="form-control" name="points_level_up" value="{{ config.points_level_up }}" min="0">
+                            <span class="input-group-text">pts</span>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Streak Bonus per Day</label>
+                        <div class="input-group">
+                            <input type="number" class="form-control" name="points_streak_per_day" value="{{ config.points_streak_per_day }}" min="0">
+                            <span class="input-group-text">pts/day</span>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Streak Bonus Max</label>
+                        <div class="input-group">
+                            <input type="number" class="form-control" name="points_streak_max" value="{{ config.points_streak_max }}" min="1">
+                            <span class="input-group-text">pts</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Bonus Thresholds -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="fas fa-sliders-h text-info"></i> Bonus Thresholds</h5>
+            </div>
+            <div class="card-body">
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label">Speed Threshold (NER)</label>
+                        <div class="input-group">
+                            <input type="number" class="form-control" name="speed_threshold_ner" value="{{ config.speed_threshold_ner }}" min="1">
+                            <span class="input-group-text">seconds</span>
+                        </div>
+                        <small class="text-muted">Complete NER faster than this for speed bonus</small>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Speed Threshold (MCN)</label>
+                        <div class="input-group">
+                            <input type="number" class="form-control" name="speed_threshold_mcn" value="{{ config.speed_threshold_mcn }}" min="1">
+                            <span class="input-group-text">seconds</span>
+                        </div>
+                        <small class="text-muted">Complete MCN faster than this for speed bonus</small>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Quality Threshold</label>
+                        <div class="input-group">
+                            <input type="number" class="form-control" name="quality_threshold" value="{{ config.quality_threshold }}" min="0" max="1" step="0.05">
+                            <span class="input-group-text">confidence</span>
+                        </div>
+                        <small class="text-muted">Confidence above this earns quality bonus (0-1)</small>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Weekly Reset Day</label>
+                        <select class="form-select" name="weekly_reset_day">
+                            <option value="0" {% if config.weekly_reset_day == 0 %}selected{% endif %}>Monday</option>
+                            <option value="1" {% if config.weekly_reset_day == 1 %}selected{% endif %}>Tuesday</option>
+                            <option value="2" {% if config.weekly_reset_day == 2 %}selected{% endif %}>Wednesday</option>
+                            <option value="3" {% if config.weekly_reset_day == 3 %}selected{% endif %}>Thursday</option>
+                            <option value="4" {% if config.weekly_reset_day == 4 %}selected{% endif %}>Friday</option>
+                            <option value="5" {% if config.weekly_reset_day == 5 %}selected{% endif %}>Saturday</option>
+                            <option value="6" {% if config.weekly_reset_day == 6 %}selected{% endif %}>Sunday</option>
+                        </select>
+                        <small class="text-muted">Day when weekly points reset</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Feature Toggles -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="fas fa-toggle-on text-success"></i> Feature Toggles</h5>
+            </div>
+            <div class="card-body">
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="streak_enabled" name="streak_enabled" {% if config.streak_enabled %}checked{% endif %}>
+                            <label class="form-check-label" for="streak_enabled">Streak Tracking & Bonus</label>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="speed_bonus_enabled" name="speed_bonus_enabled" {% if config.speed_bonus_enabled %}checked{% endif %}>
+                            <label class="form-check-label" for="speed_bonus_enabled">Speed Bonus</label>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="quality_bonus_enabled" name="quality_bonus_enabled" {% if config.quality_bonus_enabled %}checked{% endif %}>
+                            <label class="form-check-label" for="quality_bonus_enabled">Quality Bonus</label>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="first_of_day_enabled" name="first_of_day_enabled" {% if config.first_of_day_enabled %}checked{% endif %}>
+                            <label class="form-check-label" for="first_of_day_enabled">First of Day Bonus</label>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="leaderboard_enabled" name="leaderboard_enabled" {% if config.leaderboard_enabled %}checked{% endif %}>
+                            <label class="form-check-label" for="leaderboard_enabled">Leaderboard</label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Level Definitions -->
+        <div class="card mb-4">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="fas fa-layer-group text-primary"></i> Level Definitions</h5>
+                <button type="button" class="btn btn-sm btn-outline-primary" onclick="addLevelRow()">
+                    <i class="fas fa-plus"></i> Add Level
+                </button>
+            </div>
+            <div class="card-body">
+                <input type="hidden" name="level_definitions" id="levelDefinitionsJson">
+                <div class="table-responsive">
+                    <table class="table table-sm" id="levelsTable">
+                        <thead>
+                            <tr>
+                                <th style="width:80px">Level</th>
+                                <th>Title</th>
+                                <th style="width:140px">Points Required</th>
+                                <th style="width:60px"></th>
+                            </tr>
+                        </thead>
+                        <tbody id="levelsBody">
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Actions -->
+        <div class="d-flex gap-2 mb-4">
+            <button type="submit" class="btn btn-primary btn-lg">
+                <i class="fas fa-save"></i> Save Configuration
+            </button>
+            <button type="submit" name="action" value="reset_defaults" class="btn btn-outline-warning"
+                    onclick="return confirm('Reset all gamification settings to defaults?')">
+                <i class="fas fa-undo"></i> Reset to Defaults
+            </button>
+        </div>
+
+    </div>
+
+    <!-- Right Column: Info -->
+    <div class="col-lg-4">
+
+        <!-- Level Distribution -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="fas fa-chart-bar text-primary"></i> Level Distribution</h5>
+            </div>
+            <div class="card-body" id="levelDistPanel">
+                <p class="text-muted mb-0">Loading...</p>
+            </div>
+        </div>
+
+        <!-- Last Updated -->
+        <div class="card mb-4">
+            <div class="card-body">
+                <h6 class="text-muted mb-2">Last Updated</h6>
+                <p class="mb-1">{{ config.updated_at|date:"M d, Y H:i" }}</p>
+                {% if config.updated_by %}
+                <small class="text-muted">by {{ config.updated_by.username }}</small>
+                {% endif %}
+            </div>
+        </div>
+
+    </div>
+</div>
+</form>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    let levels = {{ level_definitions_json|safe }};
+
+    function renderLevelRows() {
+        const tbody = document.getElementById('levelsBody');
+        tbody.innerHTML = '';
+        levels.forEach(function(row, idx) {
+            const tr = document.createElement('tr');
+            tr.innerHTML = '<td><input type="number" class="form-control form-control-sm" value="' + row[0] + '" onchange="updateLevel(' + idx + ', 0, this.value)" min="1"></td>' +
+                '<td><input type="text" class="form-control form-control-sm" value="' + escapeHtml(row[1]) + '" onchange="updateLevel(' + idx + ', 1, this.value)"></td>' +
+                '<td><input type="number" class="form-control form-control-sm" value="' + row[2] + '" onchange="updateLevel(' + idx + ', 2, this.value)" min="0"></td>' +
+                '<td><button type="button" class="btn btn-sm btn-outline-danger" onclick="removeLevel(' + idx + ')" title="Remove"><i class="fas fa-times"></i></button></td>';
+            tbody.appendChild(tr);
+        });
+        syncLevelJson();
+    }
+
+    function updateLevel(idx, field, value) {
+        if (field === 0 || field === 2) {
+            levels[idx][field] = parseInt(value) || 0;
+        } else {
+            levels[idx][field] = value;
+        }
+        syncLevelJson();
+    }
+
+    function addLevelRow() {
+        const nextLevel = levels.length > 0 ? Math.max(...levels.map(l => l[0])) + 1 : 1;
+        const lastThreshold = levels.length > 0 ? levels[levels.length - 1][2] : 0;
+        levels.push([nextLevel, 'New Level', lastThreshold + 500]);
+        renderLevelRows();
+    }
+
+    function removeLevel(idx) {
+        if (levels.length <= 1) {
+            alert('Must have at least one level.');
+            return;
+        }
+        levels.splice(idx, 1);
+        renderLevelRows();
+    }
+
+    function syncLevelJson() {
+        document.getElementById('levelDefinitionsJson').value = JSON.stringify(levels);
+    }
+
+    function escapeHtml(str) {
+        const div = document.createElement('div');
+        div.textContent = str;
+        return div.innerHTML;
+    }
+
+    // Level distribution data
+    const levelDist = {{ level_distribution_json|safe }};
+
+    function renderLevelDist() {
+        const panel = document.getElementById('levelDistPanel');
+        if (levels.length === 0) {
+            panel.innerHTML = '<p class="text-muted mb-0">No levels defined.</p>';
+            return;
+        }
+        let html = '';
+        levels.forEach(function(row) {
+            const count = levelDist[String(row[0])] || 0;
+            html += '<div class="d-flex justify-content-between align-items-center mb-2">' +
+                '<span><span class="badge bg-secondary">L' + row[0] + '</span> ' + escapeHtml(row[1]) + '</span>' +
+                '<span class="badge bg-primary">' + count + '</span></div>';
+        });
+        panel.innerHTML = html;
+    }
+
+    // Initialize
+    renderLevelRows();
+    renderLevelDist();
+</script>
+{% endblock %}

@@ -1,0 +1,474 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ annotator.username }} - Detailed Statistics{% endblock %}
+
+{% block extra_css %}
+<style>
+    .stat-card {
+        transition: transform 0.2s;
+    }
+    .stat-card:hover {
+        transform: translateY(-2px);
+    }
+    .metric-value {
+        font-size: 2rem;
+        font-weight: bold;
+        color: #0066cc;
+    }
+    .metric-label {
+        font-size: 0.9rem;
+        color: #6c757d;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+    .entity-badge {
+        padding: 0.25rem 0.5rem;
+        margin: 0.2rem;
+        display: inline-block;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- Header -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a href="{% url 'annotation:admin_statistics_dashboard' %}">Statistics Dashboard</a></li>
+                    <li class="breadcrumb-item active">{{ annotator.username }}</li>
+                </ol>
+            </nav>
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h1 class="h3 mb-0">👤 {{ annotator.username }} - Detailed Statistics</h1>
+                    <p class="text-muted mb-0">
+                        Annotation Mode: <span class="badge bg-primary">{{ annotator.get_annotation_mode_display }}</span>
+                        | {{ period_label }}
+                    </p>
+                </div>
+                <div>
+                    <a href="{% url 'annotation:annotator_task_breakdown' annotator.id %}" class="btn btn-outline-primary">
+                        📋 View All Tasks
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body">
+                    <form method="GET" class="row g-3">
+                        <div class="col-md-4">
+                            <label for="task_type" class="form-label">Task Type</label>
+                            <select name="task_type" id="task_type" class="form-select">
+                                <option value="all" {% if task_type_filter == 'all' %}selected{% endif %}>All Tasks</option>
+                                <option value="ner" {% if task_type_filter == 'ner' %}selected{% endif %}>NER Only</option>
+                                <option value="mcn" {% if task_type_filter == 'mcn' %}selected{% endif %}>MCN Only</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label for="date_range" class="form-label">Date Range</label>
+                            <select name="date_range" id="date_range" class="form-select">
+                                <option value="7" {% if date_range == '7' %}selected{% endif %}>Last 7 Days</option>
+                                <option value="30" {% if date_range == '30' %}selected{% endif %}>Last 30 Days</option>
+                                <option value="90" {% if date_range == '90' %}selected{% endif %}>Last 90 Days</option>
+                                <option value="all" {% if date_range == 'all' %}selected{% endif %}>All Time</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4 d-flex align-items-end">
+                            <button type="submit" class="btn btn-primary">🔍 Apply Filters</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Summary Statistics -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card stat-card h-100">
+                <div class="card-body text-center">
+                    <div class="metric-value">{{ total_tasks }}</div>
+                    <div class="metric-label">Total Tasks</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card stat-card h-100">
+                <div class="card-body text-center">
+                    <div class="metric-value">{{ time_stats.average_time_minutes|floatformat:1 }}</div>
+                    <div class="metric-label">Avg Time (min)</div>
+                    <small class="text-muted">
+                        Median: {{ time_stats.median_time_minutes|floatformat:1 }}min
+                    </small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card stat-card h-100">
+                <div class="card-body text-center">
+                    <div class="metric-value">{{ total_entities }}</div>
+                    <div class="metric-label">Total Entities</div>
+                    <small class="text-muted">
+                        {{ entities_per_hour|floatformat:1 }} per hour
+                    </small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card stat-card h-100">
+                <div class="card-body text-center">
+                    <div class="metric-value">{{ time_stats.total_time_minutes|floatformat:0 }}</div>
+                    <div class="metric-label">Total Time (min)</div>
+                    <small class="text-muted">
+                        {{ time_stats.total_time_minutes|floatformat:0|add:"0"|floatformat:0|add:"0"|floatformat:-2 }} hours
+                    </small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Time Distribution -->
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">⏱️ Time Distribution</h5>
+                </div>
+                <div class="card-body">
+                    <table class="table table-sm">
+                        <tr>
+                            <td>Average Time:</td>
+                            <td class="text-end"><strong>{{ time_stats.average_time_minutes|floatformat:2 }} min</strong></td>
+                        </tr>
+                        <tr>
+                            <td>Median Time:</td>
+                            <td class="text-end"><strong>{{ time_stats.median_time_minutes|floatformat:2 }} min</strong></td>
+                        </tr>
+                        <tr>
+                            <td>Min Time:</td>
+                            <td class="text-end"><strong>{{ time_stats.min_time_minutes|floatformat:2 }} min</strong></td>
+                        </tr>
+                        <tr>
+                            <td>Max Time:</td>
+                            <td class="text-end"><strong>{{ time_stats.max_time_minutes|floatformat:2 }} min</strong></td>
+                        </tr>
+                        <tr>
+                            <td>Std Deviation:</td>
+                            <td class="text-end"><strong>{{ time_stats.std_time_minutes|floatformat:2 }} min</strong></td>
+                        </tr>
+                    </table>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">📊 Task Type Breakdown</h5>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <h6>NER Tasks</h6>
+                        <p class="mb-1">Count: <strong>{{ task_type_breakdown.ner.count }}</strong></p>
+                        <p class="mb-1">Avg Time: <strong>{{ task_type_breakdown.ner.avg_time|floatformat:1 }} min</strong></p>
+                        <p class="mb-0">Total Time: <strong>{{ task_type_breakdown.ner.total_time|floatformat:1 }} min</strong></p>
+                    </div>
+                    <hr>
+                    <div>
+                        <h6>MCN Tasks</h6>
+                        <p class="mb-1">Count: <strong>{{ task_type_breakdown.mcn.count }}</strong></p>
+                        <p class="mb-1">Avg Time: <strong>{{ task_type_breakdown.mcn.avg_time|floatformat:1 }} min</strong></p>
+                        <p class="mb-0">Total Time: <strong>{{ task_type_breakdown.mcn.total_time|floatformat:1 }} min</strong></p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Entity Source Breakdown (Manual vs LLM) -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">📊 Entity Source Breakdown: Manual vs LLM</h5>
+                </div>
+                <div class="card-body">
+                    <!-- LLM Agreement Summary -->
+                    {% if entity_source_stats.llm_agreement_rate > 0 or entity_source_stats.llm_entities_rejected > 0 %}
+                    <div class="alert alert-info mb-4">
+                        <div class="row text-center">
+                            <div class="col-md-4">
+                                <strong>LLM Agreement Rate</strong><br>
+                                <span class="fs-4">{{ entity_source_stats.llm_agreement_rate|floatformat:1 }}%</span><br>
+                                <small class="text-muted">Accepted + Modified vs Total LLM Decided</small>
+                            </div>
+                            <div class="col-md-4">
+                                <strong>Active Entities</strong><br>
+                                <span class="fs-4">{{ entity_source_stats.active_entities }}</span><br>
+                                <small class="text-muted">Excluding {{ entity_source_stats.llm_entities_rejected }} rejected</small>
+                            </div>
+                            <div class="col-md-4">
+                                <strong>Manually Added in LLM Mode</strong><br>
+                                <span class="fs-4">{{ entity_source_stats.manual_in_llm_mode }}</span><br>
+                                <small class="text-muted">Entities annotator added that LLM missed</small>
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    <div class="row text-center mb-4">
+                        <div class="col">
+                            <div class="p-3 border rounded bg-light">
+                                <h3 class="text-primary">{{ entity_source_stats.manual_entities }}</h3>
+                                <p class="text-muted mb-0">Manual Entities</p>
+                                <small class="text-muted">{{ entity_source_stats.manual_percentage|floatformat:1 }}% of total</small>
+                                {% if entity_source_stats.manual_in_llm_mode > 0 %}
+                                <br><small class="text-info">{{ entity_source_stats.manual_in_llm_mode }} added in LLM mode</small>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="col">
+                            <div class="p-3 border rounded bg-light">
+                                <h3 class="text-success">{{ entity_source_stats.llm_entities_accepted }}</h3>
+                                <p class="text-muted mb-0">LLM Accepted</p>
+                                <small class="text-muted">{{ entity_source_stats.llm_accepted_percentage|floatformat:1 }}% of total</small>
+                            </div>
+                        </div>
+                        <div class="col">
+                            <div class="p-3 border rounded" style="background-color: #fff3f3;">
+                                <h3 class="text-danger">{{ entity_source_stats.llm_entities_rejected }}</h3>
+                                <p class="text-muted mb-0">LLM Rejected</p>
+                                <small class="text-danger">{{ entity_source_stats.llm_rejected_percentage|floatformat:1 }}% of total</small>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Entity Source by Type -->
+                    {% if entity_source_stats.by_entity_type %}
+                    <h6 class="mt-4 mb-3">Entity Source by Type</h6>
+                    <div class="table-responsive">
+                        <table class="table table-sm">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Entity Type</th>
+                                    <th>Active</th>
+                                    <th>Manual</th>
+                                    <th>Manual (LLM mode)</th>
+                                    <th>LLM Accepted</th>
+                                    <th>LLM Rejected</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for entity_type, stats in entity_source_stats.by_entity_type.items %}
+                                <tr>
+                                    <td><strong>{{ entity_type }}</strong></td>
+                                    <td>{{ stats.active }}</td>
+                                    <td>
+                                        <span class="badge bg-primary">{{ stats.manual }}</span>
+                                    </td>
+                                    <td>
+                                        {% if stats.manual_in_llm > 0 %}
+                                        <span class="badge bg-info">{{ stats.manual_in_llm }}</span>
+                                        {% else %}
+                                        <span class="text-muted">-</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-success">{{ stats.llm_accepted }}</span>
+                                    </td>
+                                    <td>
+                                        {% if stats.llm_rejected > 0 %}
+                                        <span class="badge bg-danger">{{ stats.llm_rejected }}</span>
+                                        {% else %}
+                                        <span class="text-muted">-</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Entity Distribution -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">🏷️ Entity Type Distribution (Overall)</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        {% for entity_type, count in entity_distribution.items %}
+                        <div class="col-md-2 col-sm-4 col-6 mb-3">
+                            <div class="text-center p-3 border rounded">
+                                <h4 class="text-primary mb-1">{{ count }}</h4>
+                                <small class="text-muted">{{ entity_type }}</small>
+                            </div>
+                        </div>
+                        {% empty %}
+                        <div class="col-12 text-center text-muted">
+                            No entity data available
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- NER LLM Statistics (if applicable) -->
+    {% if llm_stats.total_results > 0 %}
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">🤖 NER LLM Prediction Performance</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row text-center">
+                        <div class="col-md-3">
+                            <h4 class="text-success">{{ llm_stats.accepted }}</h4>
+                            <p class="text-muted mb-0">Accepted</p>
+                            <small class="text-muted">{{ llm_stats.acceptance_rate|floatformat:1 }}%</small>
+                        </div>
+                        <div class="col-md-3">
+                            <h4 class="text-danger">{{ llm_stats.rejected }}</h4>
+                            <p class="text-muted mb-0">Rejected</p>
+                            <small class="text-muted">{{ llm_stats.rejection_rate|floatformat:1 }}%</small>
+                        </div>
+                        <div class="col-md-3">
+                            <h4 class="text-info">{{ llm_stats.manual_added }}</h4>
+                            <p class="text-muted mb-0">Manually Added</p>
+                            <small class="text-muted">in LLM mode</small>
+                        </div>
+                        <div class="col-md-3">
+                            <h4 class="text-primary">{{ llm_stats.total_predictions }}</h4>
+                            <p class="text-muted mb-0">Total Predictions</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- MCN Statistics -->
+    {% if mcn_stats.total_results > 0 %}
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">🏥 MCN Statistics</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row text-center mb-3">
+                        <div class="col-md-3">
+                            <h4 class="text-primary">{{ mcn_stats.total_entities }}</h4>
+                            <p class="text-muted mb-0">Total MCN Entities</p>
+                        </div>
+                        <div class="col-md-3">
+                            <h4 class="text-success">{{ mcn_stats.total_mapped }}</h4>
+                            <p class="text-muted mb-0">Mapped to SNOMED</p>
+                            <small class="text-muted">{{ mcn_stats.overall_mapping_rate|floatformat:1 }}%</small>
+                        </div>
+                        <div class="col-md-3">
+                            <h4 class="text-info">{{ mcn_stats.llm_total }}</h4>
+                            <p class="text-muted mb-0">LLM-Assisted</p>
+                            <small class="text-muted">{{ mcn_stats.llm_mapping_rate|floatformat:1 }}% mapped</small>
+                        </div>
+                        <div class="col-md-3">
+                            <h4 class="text-secondary">{{ mcn_stats.manual_total }}</h4>
+                            <p class="text-muted mb-0">Manual MCN</p>
+                            <small class="text-muted">{{ mcn_stats.manual_mapping_rate|floatformat:1 }}% mapped</small>
+                        </div>
+                    </div>
+                    {% if mcn_stats.llm_total > 0 %}
+                    <hr>
+                    <h6 class="text-muted mb-2">LLM SNOMED Suggestion Decisions</h6>
+                    <div class="row text-center">
+                        <div class="col">
+                            <h5 class="text-success">{{ mcn_stats.llm_accepted }}</h5>
+                            <p class="text-muted mb-0">Accepted</p>
+                        </div>
+                        <div class="col">
+                            <h5 class="text-warning">{{ mcn_stats.llm_modified }}</h5>
+                            <p class="text-muted mb-0">Changed Term</p>
+                        </div>
+                        <div class="col">
+                            <h5 class="text-secondary">{{ mcn_stats.llm_pending }}</h5>
+                            <p class="text-muted mb-0">Unmapped</p>
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Recent Tasks -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">📋 Recent Tasks (Last 50)</h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-hover table-sm">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Document</th>
+                                    <th>Task Type</th>
+                                    <th>Duration (min)</th>
+                                    <th>Entities</th>
+                                    <th>Entities/min</th>
+                                    <th>Completed</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in task_details %}
+                                <tr>
+                                    <td>{{ item.task.document.title|default:"Document"|truncatechars:40 }}</td>
+                                    <td><span class="badge bg-secondary">{{ item.task.get_task_type_display }}</span></td>
+                                    <td>{{ item.duration_minutes|floatformat:1 }}</td>
+                                    <td>{{ item.entities_count }}</td>
+                                    <td>{{ item.entities_per_minute|floatformat:2 }}</td>
+                                    <td>{{ item.task.completed_at|date:"Y-m-d H:i" }}</td>
+                                    <td>
+                                        <a href="{% url 'annotation:task_detail_stats' item.task.id %}" class="btn btn-sm btn-outline-info" title="View task details">
+                                            🔍
+                                        </a>
+                                    </td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="7" class="text-center text-muted">No tasks found</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="text-center mt-3">
+                        <a href="{% url 'annotation:annotator_task_breakdown' annotator.id %}" class="btn btn-primary">
+                            View All Tasks →
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

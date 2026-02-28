@@ -1,0 +1,336 @@
+{% extends 'base.html' %}
+
+{% block title %}Task #{{ task.id }} - Detailed Statistics{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- Header -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a href="{% url 'annotation:admin_statistics_dashboard' %}">Statistics Dashboard</a></li>
+                    <li class="breadcrumb-item"><a href="{% url 'annotation:annotator_detail_stats' task.annotator.id %}">{{ task.annotator.username }}</a></li>
+                    <li class="breadcrumb-item active">Task #{{ task.id }}</li>
+                </ol>
+            </nav>
+            <h1 class="h3 mb-0">🔍 Task #{{ task.id }} - Detailed Statistics</h1>
+        </div>
+    </div>
+
+    <!-- Task Overview -->
+    <div class="row mb-4">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">Task Information</h5>
+                </div>
+                <div class="card-body">
+                    <table class="table table-sm">
+                        <tr>
+                            <td width="30%"><strong>Annotator:</strong></td>
+                            <td>{{ task.annotator.username }} ({{ task.annotator.get_annotation_mode_display }})</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Task Type:</strong></td>
+                            <td><span class="badge {% if task.task_type == 'ner' %}bg-primary{% else %}bg-success{% endif %}">{{ task.get_task_type_display }}</span></td>
+                        </tr>
+                        <tr>
+                            <td><strong>Document:</strong></td>
+                            <td>
+                                {{ task.document.title|default:"Untitled" }}
+                                <a href="{% url 'annotation:document_stats' task.document.id %}" class="btn btn-sm btn-outline-secondary ms-2">View Document Stats</a>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td><strong>Started:</strong></td>
+                            <td>{{ task.started_at|date:"Y-m-d H:i:s" }}</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Completed:</strong></td>
+                            <td>{{ task.completed_at|date:"Y-m-d H:i:s" }}</td>
+                        </tr>
+                    </table>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">Performance Metrics</h5>
+                </div>
+                <div class="card-body text-center">
+                    <h2 class="text-primary">{{ duration_minutes|floatformat:2 }}</h2>
+                    <p class="text-muted mb-3">Duration (minutes)</p>
+                    <h2 class="text-success">{{ entities_count }}</h2>
+                    <p class="text-muted mb-3">Entities Extracted</p>
+                    <h2 class="text-info">{{ entities_per_minute|floatformat:2 }}</h2>
+                    <p class="text-muted mb-0">Entities per Minute</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Document Content -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">📄 Document Content</h5>
+                </div>
+                <div class="card-body">
+                    <div class="border p-3 bg-light rounded">
+                        {{ task.document.content }}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Entity Statistics -->
+    {% if result %}
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">🏷️ Entity Type Distribution</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        {% for entity_type, count in entity_stats.items %}
+                        <div class="col-md-2 col-sm-4 col-6 mb-3">
+                            <div class="text-center p-3 border rounded">
+                                <h3 class="text-primary">{{ count }}</h3>
+                                <small class="text-muted">{{ entity_type }}</small>
+                            </div>
+                        </div>
+                        {% empty %}
+                        <div class="col-12 text-center text-muted">
+                            No entities found
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Entities by Type (Detailed) -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">📝 Extracted Entities (Grouped by Type)</h5>
+                </div>
+                <div class="card-body">
+                    {% for entity_type, entity_list in entities_by_type.items %}
+                    <div class="mb-4">
+                        <h6 class="text-primary">{{ entity_type }} ({{ entity_list|length }})</h6>
+                        <div class="d-flex flex-wrap gap-2">
+                            {% for entity in entity_list %}
+                            <span class="badge bg-secondary" style="font-size: 0.9rem;">
+                                {{ entity.text }}
+                                {% if entity.source == 'llm' %}
+                                    {% if entity.status == 'accepted' or entity.status == 'approved' %}
+                                        <span class="text-success" title="LLM - Accepted">✓</span>
+                                    {% elif entity.status == 'modified' %}
+                                        <span class="text-warning" title="LLM - Modified">✎</span>
+                                    {% elif entity.status == 'rejected' %}
+                                        <span class="text-danger" title="LLM - Rejected">✗</span>
+                                    {% else %}
+                                        <span class="text-info" title="LLM - Pending">🤖</span>
+                                    {% endif %}
+                                {% else %}
+                                    <span class="text-light" title="Manual">✍️</span>
+                                {% endif %}
+                            </span>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% empty %}
+                    <p class="text-muted text-center">No entities extracted</p>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- LLM Performance (if applicable) -->
+    {% if llm_summary %}
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">🤖 LLM Prediction Summary</h5>
+                </div>
+                <div class="card-body">
+                    <table class="table table-sm">
+                        <tr>
+                            <td>Total LLM Predictions:</td>
+                            <td class="text-end"><strong>{{ llm_summary.total_llm_entities }}</strong></td>
+                        </tr>
+                        <tr class="table-success">
+                            <td>Accepted:</td>
+                            <td class="text-end"><strong>{{ llm_summary.accepted }} ({{ llm_summary.acceptance_rate|floatformat:1 }}%)</strong></td>
+                        </tr>
+                        <tr class="table-warning">
+                            <td>Modified:</td>
+                            <td class="text-end"><strong>{{ llm_summary.modified }} ({{ llm_summary.modification_rate|floatformat:1 }}%)</strong></td>
+                        </tr>
+                        <tr class="table-danger">
+                            <td>Rejected:</td>
+                            <td class="text-end"><strong>{{ llm_summary.rejected }} ({{ llm_summary.rejection_rate|floatformat:1 }}%)</strong></td>
+                        </tr>
+                        {% if llm_summary.manual_added > 0 %}
+                        <tr class="table-info">
+                            <td>Manually Added by Annotator:</td>
+                            <td class="text-end"><strong>{{ llm_summary.manual_added }}</strong></td>
+                        </tr>
+                        {% endif %}
+                        <tr>
+                            <td>Active Entities (excl. rejected):</td>
+                            <td class="text-end"><strong>{{ llm_summary.active_entities }}</strong></td>
+                        </tr>
+                        {% if llm_summary.modified > 0 %}
+                        <tr>
+                            <td>Avg Edit Distance:</td>
+                            <td class="text-end"><strong>{{ llm_summary.average_edit_distance|floatformat:2 }}</strong></td>
+                        </tr>
+                        <tr>
+                            <td>Avg Token Changes:</td>
+                            <td class="text-end"><strong>{{ llm_summary.average_token_changes|floatformat:2 }}</strong></td>
+                        </tr>
+                        {% endif %}
+                    </table>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">📊 LLM Decision Distribution</h5>
+                </div>
+                <div class="card-body text-center">
+                    <div class="row">
+                        <div class="col-3">
+                            <h2 class="text-success">{{ llm_summary.accepted }}</h2>
+                            <p class="text-muted mb-0">Accepted</p>
+                        </div>
+                        <div class="col-3">
+                            <h2 class="text-warning">{{ llm_summary.modified }}</h2>
+                            <p class="text-muted mb-0">Modified</p>
+                        </div>
+                        <div class="col-3">
+                            <h2 class="text-danger">{{ llm_summary.rejected }}</h2>
+                            <p class="text-muted mb-0">Rejected</p>
+                        </div>
+                        <div class="col-3">
+                            <h2 class="text-info">{{ llm_summary.manual_added }}</h2>
+                            <p class="text-muted mb-0">+ Manual</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- LLM Entity Details -->
+    {% if llm_entity_details %}
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">🔍 LLM Entity-by-Entity Breakdown</h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Entity Text</th>
+                                    <th>Type</th>
+                                    <th>Status</th>
+                                    <th>Original</th>
+                                    <th>Modified To</th>
+                                    <th>Edit Distance</th>
+                                    <th>Token Changes</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for entity in llm_entity_details %}
+                                <tr>
+                                    <td><strong>{{ entity.text }}</strong></td>
+                                    <td><span class="badge bg-secondary">{{ entity.label }}</span></td>
+                                    <td>
+                                        {% if entity.status == 'accepted' or entity.status == 'approved' %}
+                                            <span class="badge bg-success">✓ Accepted</span>
+                                        {% elif entity.status == 'modified' %}
+                                            <span class="badge bg-warning">✎ Modified</span>
+                                        {% elif entity.status == 'rejected' %}
+                                            <span class="badge bg-danger">✗ Rejected</span>
+                                        {% else %}
+                                            <span class="badge bg-info">Pending</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>{{ entity.original_text|default:"-" }}</td>
+                                    <td>{{ entity.modified_text|default:"-" }}</td>
+                                    <td>{{ entity.edit_distance|default:"-" }}</td>
+                                    <td>{{ entity.token_changes|default:"-" }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Manually Added Entities (in LLM mode) -->
+    {% if manual_entity_details %}
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card border-info">
+                <div class="card-header bg-info text-white">
+                    <h5 class="card-title mb-0">✍️ Entities Manually Added by Annotator (LLM missed these)</h5>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted mb-3">These entities were manually added by the annotator in LLM-assisted mode, indicating the LLM did not detect them.</p>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Entity Text</th>
+                                    <th>Type</th>
+                                    <th>Source</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for entity in manual_entity_details %}
+                                <tr>
+                                    <td><strong>{{ entity.text }}</strong></td>
+                                    <td><span class="badge bg-secondary">{{ entity.label }}</span></td>
+                                    <td><span class="badge bg-info">Manually Added</span></td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+    {% endif %}
+    {% else %}
+    <div class="row">
+        <div class="col-12">
+            <div class="alert alert-warning">
+                <strong>No annotation results found for this task.</strong>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

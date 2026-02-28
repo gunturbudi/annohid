@@ -1,0 +1,197 @@
+{% extends 'base.html' %}
+
+{% block title %}Profile - AnnoHID{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h2 class="mb-4">👤 User Profile</h2>
+    </div>
+</div>
+
+<div class="row">
+    <!-- User Information -->
+    <div class="col-lg-8">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">📋 Account Information</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label class="form-label text-muted">Username</label>
+                            <div class="form-control-plaintext">{{ user.username }}</div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label class="form-label text-muted">Role</label>
+                            <div class="form-control-plaintext">
+                                <span class="badge bg-{% if user.role == 'admin' %}warning{% else %}primary{% endif %} fs-6">
+                                    {{ user.get_role_display }}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label class="form-label text-muted">Email</label>
+                            <div class="form-control-plaintext">
+                                {% if user.email %}
+                                    {{ user.email }}
+                                {% else %}
+                                    <span class="text-muted">Not provided</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label class="form-label text-muted">Account Status</label>
+                            <div class="form-control-plaintext">
+                                {% if user.is_active %}
+                                    <span class="badge bg-success fs-6">Active</span>
+                                {% else %}
+                                    <span class="badge bg-danger fs-6">Inactive</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label class="form-label text-muted">Member Since</label>
+                            <div class="form-control-plaintext">{{ user.date_joined|date:"F d, Y" }}</div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label class="form-label text-muted">Last Activity</label>
+                            <div class="form-control-plaintext">
+                                {% if user.last_activity %}
+                                    {{ user.last_activity|timesince }} ago
+                                {% else %}
+                                    <span class="text-muted">Never recorded</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Session Activity -->
+    <div class="col-lg-4">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">🔄 Current Session</h5>
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <label class="form-label text-muted">Session ID</label>
+                    <div class="form-control-plaintext">
+                        <code>{{ request.session.session_key|slice:":8" }}...</code>
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label text-muted">Session Status</label>
+                    <div class="form-control-plaintext">
+                        <span class="badge bg-success fs-6">
+                            <span class="activity-indicator"></span>
+                            Active
+                        </span>
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label text-muted">IP Address</label>
+                    <div class="form-control-plaintext text-muted">
+                        {{ request.META.REMOTE_ADDR|default:"Unknown" }}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Recent Sessions -->
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">📚 Recent Sessions</h5>
+            </div>
+            <div class="card-body">
+                {% if recent_sessions %}
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Session ID</th>
+                                <th>Created</th>
+                                <th>Last Activity</th>
+                                <th>IP Address</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for session in recent_sessions %}
+                            <tr {% if session.session_key == request.session.session_key %}class="table-primary"{% endif %}>
+                                <td>
+                                    <code>{{ session.session_key|slice:":8" }}...</code>
+                                    {% if session.session_key == request.session.session_key %}
+                                        <span class="badge bg-primary ms-1">Current</span>
+                                    {% endif %}
+                                </td>
+                                <td>{{ session.created_at|date:"M d, Y H:i" }}</td>
+                                <td>{{ session.last_activity|timesince }} ago</td>
+                                <td class="text-muted">{{ session.ip_address|default:"Unknown" }}</td>
+                                <td>
+                                    {% if session.is_active %}
+                                        <span class="badge bg-success">Active</span>
+                                    {% else %}
+                                        <span class="badge bg-secondary">Inactive</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="text-center text-muted py-4">
+                    <i class="display-6">📱</i>
+                    <p class="mt-2">No session history available</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Security Notice -->
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="alert alert-info">
+            <h6 class="alert-heading">🔒 Security Notice</h6>
+            <p class="mb-0">
+                Your sessions are securely isolated from other users. Each annotation session maintains
+                complete separation to ensure data integrity and user privacy. Always log out when
+                finished to clear your session data.
+            </p>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Highlight current session row
+    document.addEventListener('DOMContentLoaded', function() {
+        const currentSessionRow = document.querySelector('.table-primary');
+        if (currentSessionRow) {
+            currentSessionRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+    });
+</script>
+{% endblock %}

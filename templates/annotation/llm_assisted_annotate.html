@@ -1,0 +1,1241 @@
+{% extends 'base.html' %}
+
+{% block title %}LLM-Assisted Medical Text Annotation - AnnoHID{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h2>🤖 LLM-Assisted Medical Text Annotation</h2>
+            <div>
+                <a href="{% url 'annotation:document_detail' document.id %}" class="btn btn-outline-secondary">
+                    ← Back to Document
+                </a>
+                {% if user.can_do_manual_annotation %}
+                <a href="{% url 'annotation:manual_annotate' document.id %}" class="btn btn-outline-info">
+                    ✋ Switch to Manual Mode
+                </a>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Instructions -->
+<div class="alert alert-info mb-4">
+    <h5><i class="fas fa-info-circle me-2"></i>How to Use LLM-Assisted Annotation</h5>
+    <ol class="mb-0">
+        <li><strong>Review LLM suggestions</strong> highlighted with <strong>solid borders</strong> in the text below</li>
+        <li><strong>Click approve (✓) or reject (✗)</strong> for each LLM suggestion</li>
+        <li><strong>Correct rejected entities:</strong> After rejecting, select a larger or corrected span and it will replace the rejected entity</li>
+        <li><strong>Add manual annotations</strong> by selecting plain text and choosing an entity type - these will appear with <strong>dashed borders</strong></li>
+        <li><strong>Save your decisions</strong> for analysis and final annotation</li>
+    </ol>
+    <div class="mt-2">
+        <small class="text-muted">
+            <strong>Note:</strong> LLM suggestions have solid borders, manual annotations have dashed borders.
+            Manual annotations will replace rejected LLM suggestions if they overlap.
+        </small>
+    </div>
+</div>
+
+<!-- API Status Check -->
+{% if not llm_annotation %}
+<div class="alert alert-warning">
+    <h5>⚠️ No LLM Suggestions Available</h5>
+    <p>LLM suggestions could not be generated for this document. Please check your API configuration or switch to manual mode.</p>
+</div>
+{% endif %}
+
+<div class="row">
+    <!-- Document Content and Annotation Interface -->
+    <div class="col-lg-8">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">📄 Document Content with LLM Suggestions</h5>
+            </div>
+            <div class="card-body">
+                <!-- Entity Type Selection for Manual Additions -->
+                <div class="mb-3">
+                    <label class="form-label fw-bold">Add Manual Entity (Select Type):</label>
+                    <div class="entity-types">
+                        <div class="entity-type-btn selected" data-type="SYMPTOM">SYMPTOM</div>
+                        <div class="entity-type-btn" data-type="DISEASE">DISEASE</div>
+                        <div class="entity-type-btn" data-type="BODY_PART">BODY_PART</div>
+                        <div class="entity-type-btn" data-type="MEDICATION">MEDICATION</div>
+                        <div class="entity-type-btn" data-type="PROCEDURE">PROCEDURE</div>
+                    </div>
+                </div>
+
+                <!-- Text with LLM Suggestions -->
+                <div class="annotation-text" id="annotationText">
+                    {{ document.content }}
+                </div>
+                <small class="text-muted">
+                    LLM suggestions are highlighted. Use ✓/✗ buttons to approve/reject.
+                    Select plain text to add manual annotations.
+                </small>
+            </div>
+        </div>
+
+        <!-- Annotation Review Panel -->
+        <div class="card mt-4">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    📝 Annotation Review
+                    (<span id="totalCount">0</span> total,
+                    <span id="approvedCount" class="text-success">0</span> approved,
+                    <span id="rejectedCount" class="text-danger">0</span> rejected,
+                    <span id="manualCount" class="text-info">0</span> manual)
+                </h5>
+            </div>
+            <div class="card-body">
+                <div id="annotationList" class="annotation-list">
+                    <div class="text-center text-muted">Loading annotations...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Control Panel -->
+    <div class="col-lg-4">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">⚙️ Annotation Controls</h5>
+            </div>
+            <div class="card-body">
+                <!-- Toggle for hiding rejected entities -->
+                <div class="mb-3 p-3 bg-light rounded">
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" id="hideRejectedToggle" onchange="toggleRejectedVisibility()">
+                        <label class="form-check-label" for="hideRejectedToggle">
+                            <strong>Hide Rejected Entities</strong>
+                            <br>
+                            <small class="text-muted">Remove highlight from rejected entities to easily re-annotate</small>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="d-grid gap-2">
+                    <button type="button" class="btn btn-success" id="saveBtn" onclick="saveAnnotations()">
+                        <i class="fas fa-save me-2"></i>Save Annotation Decisions
+                    </button>
+                    <button type="button" class="btn btn-outline-warning" onclick="resetDecisions()">
+                        <i class="fas fa-undo me-2"></i>Reset All Decisions
+                    </button>
+                </div>
+                <div id="saveFeedback" class="mt-3" style="display:none;"></div>
+
+<!-- Save overlay -->
+<div id="saveOverlay" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:9999; justify-content:center; align-items:center;">
+    <div style="background:#fff; border-radius:12px; padding:2rem 2.5rem; text-align:center; box-shadow:0 8px 32px rgba(0,0,0,0.3); max-width:360px;">
+        <div id="overlaySpinner">
+            <div class="spinner-border text-success mb-3" style="width:3rem; height:3rem;" role="status"></div>
+            <h5 class="mb-1">Saving annotations...</h5>
+            <p class="text-muted mb-0 small">Please wait</p>
+        </div>
+        <div id="overlaySuccess" style="display:none;">
+            <div style="font-size:3rem; color:#28a745;" class="mb-2"><i class="fas fa-check-circle"></i></div>
+            <h5 class="mb-1">Saved successfully!</h5>
+            <p class="text-muted mb-0 small">Redirecting to your documents...</p>
+            <div class="progress mt-3" style="height:4px;">
+                <div id="overlayProgressBar" class="progress-bar bg-success" style="width:0%; transition:width linear;"></div>
+            </div>
+        </div>
+        <div id="overlayError" style="display:none;">
+            <div style="font-size:3rem; color:#dc3545;" class="mb-2"><i class="fas fa-times-circle"></i></div>
+            <h5 class="mb-1">Save failed</h5>
+            <p class="text-muted mb-0 small" id="overlayErrorMsg"></p>
+            <button class="btn btn-outline-secondary btn-sm mt-3" onclick="hideOverlay()">Close</button>
+        </div>
+    </div>
+</div>
+
+                <div class="mt-4">
+                    <h6 class="text-muted">Annotation Types</h6>
+                    <div class="mb-2">
+                        <span class="llm-suggestion pending" style="padding: 2px 6px; border-radius: 4px; border: 2px solid #6c757d; background-color: rgba(108, 117, 125, 0.2); font-size: 12px;">LLM Suggestion (solid border)</span>
+                    </div>
+                    <div class="mb-2">
+                        <span style="padding: 2px 6px; border-radius: 4px; border: 2px dashed #E74C3C; background-color: rgba(231, 76, 60, 0.15); font-size: 12px;">Manual Addition (dashed border)</span>
+                    </div>
+                </div>
+
+                <div class="mt-4">
+                    <h6 class="text-muted">LLM Status Legend</h6>
+                    <div class="mb-2">
+                        <span class="badge bg-light text-dark border">Pending Review</span>
+                    </div>
+                    <div class="mb-2">
+                        <span class="badge bg-success">Approved</span>
+                    </div>
+                    <div class="mb-2">
+                        <span class="badge bg-danger">Rejected</span>
+                    </div>
+                </div>
+
+                <div class="mt-4">
+                    <h6 class="text-muted">Entity Type Colors</h6>
+                    <div class="d-flex flex-wrap gap-1">
+                        <span class="badge entity-badge entity-SYMPTOM">SYMPTOM</span>
+                        <span class="badge entity-badge entity-DISEASE">DISEASE</span>
+                        <span class="badge entity-badge entity-BODY_PART">BODY_PART</span>
+                        <span class="badge entity-badge entity-MEDICATION">MEDICATION</span>
+                        <span class="badge entity-badge entity-PROCEDURE">PROCEDURE</span>
+                    </div>
+                    <small class="text-muted mt-1 d-block">LLM suggestions: solid borders, Manual: dashed borders</small>
+                </div>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+
+<style>
+    /* Entity Type Selection Buttons */
+    .entity-types {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-bottom: 20px;
+        justify-content: center;
+    }
+
+    .entity-type-btn {
+        background: white;
+        border: 2px solid;
+        border-radius: 25px;
+        padding: 8px 16px;
+        cursor: pointer;
+        transition: all 0.3s;
+        font-weight: 500;
+        font-size: 14px;
+    }
+
+    .entity-type-btn:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+    }
+
+    .entity-type-btn.selected {
+        color: white;
+        transform: scale(1.05);
+    }
+
+    /* Entity colors - More distinct and vibrant */
+    .entity-SYMPTOM, .entity-type-btn[data-type="SYMPTOM"], .entity-badge.entity-SYMPTOM {
+        border-color: #E74C3C;
+        background-color: rgba(231, 76, 60, 0.15);
+    }
+    .entity-type-btn[data-type="SYMPTOM"].selected, .entity-badge.entity-SYMPTOM {
+        background-color: #E74C3C;
+        color: white;
+    }
+
+    .entity-DISEASE, .entity-type-btn[data-type="DISEASE"], .entity-badge.entity-DISEASE {
+        border-color: #F39C12;
+        background-color: rgba(243, 156, 18, 0.15);
+    }
+    .entity-type-btn[data-type="DISEASE"].selected, .entity-badge.entity-DISEASE {
+        background-color: #F39C12;
+        color: white;
+    }
+
+    .entity-BODY_PART, .entity-type-btn[data-type="BODY_PART"], .entity-badge.entity-BODY_PART {
+        border-color: #1ABC9C;
+        background-color: rgba(26, 188, 156, 0.15);
+    }
+    .entity-type-btn[data-type="BODY_PART"].selected, .entity-badge.entity-BODY_PART {
+        background-color: #1ABC9C;
+        color: white;
+    }
+
+    .entity-MEDICATION, .entity-type-btn[data-type="MEDICATION"], .entity-badge.entity-MEDICATION {
+        border-color: #3498DB;
+        background-color: rgba(52, 152, 219, 0.15);
+    }
+    .entity-type-btn[data-type="MEDICATION"].selected, .entity-badge.entity-MEDICATION {
+        background-color: #3498DB;
+        color: white;
+    }
+
+    .entity-PROCEDURE, .entity-type-btn[data-type="PROCEDURE"], .entity-badge.entity-PROCEDURE {
+        border-color: #9B59B6;
+        background-color: rgba(155, 89, 182, 0.15);
+    }
+    .entity-type-btn[data-type="PROCEDURE"].selected, .entity-badge.entity-PROCEDURE {
+        background-color: #9B59B6;
+        color: white;
+    }
+
+    /* Annotation Text */
+    .annotation-text {
+        background: #fff;
+        border: 2px solid #e9ecef;
+        border-radius: 10px;
+        padding: 20px;
+        font-size: 16px;
+        line-height: 1.8;
+        margin-bottom: 20px;
+        user-select: text;
+        cursor: text;
+        min-height: 200px;
+    }
+
+    /* LLM suggestion highlighting */
+    .llm-suggestion {
+        padding: 2px 4px;
+        border-radius: 4px;
+        cursor: pointer;
+        position: relative;
+        transition: all 0.2s;
+        border: 2px solid;
+        margin: 0 1px;
+        display: inline;
+    }
+
+    /* Overlapping entity support - nested spans get additional styling */
+    .llm-suggestion .llm-suggestion,
+    .llm-suggestion .manual-entity,
+    .manual-entity .llm-suggestion,
+    .manual-entity .manual-entity {
+        border-width: 0 0 2px 0;
+        margin: 0;
+        padding: 0 2px;
+    }
+
+    /* Visual indicator for overlapping entities */
+    .llm-suggestion .llm-suggestion::before,
+    .manual-entity .llm-suggestion::before {
+        content: '';
+        position: absolute;
+        top: -2px;
+        left: 0;
+        right: 0;
+        height: 2px;
+        background: inherit;
+        border-radius: 2px 2px 0 0;
+    }
+
+    .llm-suggestion.pending {
+        background-color: rgba(108, 117, 125, 0.2);
+        border-color: #6c757d;
+    }
+
+    /* Approved entities should use their entity type colors, not green */
+    .llm-suggestion.approved {
+        /* Background and border will be inherited from entity type classes */
+        opacity: 1;
+    }
+
+    .llm-suggestion.rejected {
+        background-color: rgba(220, 53, 69, 0.15);
+        border-color: #dc3545;
+        text-decoration: none;
+        /* Controllable strikethrough via gradient (unlike text-decoration, won't bleed into nested spans) */
+        background-image: linear-gradient(
+            transparent calc(50% - 0.5px),
+            rgba(220, 53, 69, 0.7) calc(50% - 0.5px),
+            rgba(220, 53, 69, 0.7) calc(50% + 0.5px),
+            transparent calc(50% + 0.5px)
+        );
+        opacity: 0.6;
+        border-style: dotted;
+    }
+
+    /* When rejected is nested inside another annotation, use subtle indicator instead of strikethrough */
+    .llm-suggestion .llm-suggestion.rejected,
+    .manual-entity .llm-suggestion.rejected {
+        background-image: none;
+        background-color: transparent;
+        opacity: 0.8;
+        border: none;
+        border-bottom: 2px dotted rgba(220, 53, 69, 0.5);
+        box-shadow: none;
+    }
+
+    /* When approved/pending is nested inside rejected, ensure clean display */
+    .llm-suggestion.rejected .llm-suggestion.approved,
+    .llm-suggestion.rejected .llm-suggestion.pending,
+    .llm-suggestion.rejected .manual-entity {
+        opacity: 1;
+    }
+
+    .llm-suggestion.rejected:hover::after {
+        content: "💡 Select a larger/corrected span to replace this";
+        position: absolute;
+        top: -40px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: #fff3cd;
+        color: #856404;
+        border: 1px solid #ffc107;
+        border-radius: 4px;
+        padding: 5px 10px;
+        font-size: 12px;
+        white-space: nowrap;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+        z-index: 1001;
+        pointer-events: none;
+    }
+
+    /* Hide rejected entities when toggle is active */
+    .hide-rejected .llm-suggestion.rejected {
+        background-color: transparent;
+        background-image: none;
+        border: none;
+        text-decoration: none;
+        opacity: 1;
+        padding: 0;
+        margin: 0;
+        box-shadow: none;
+        pointer-events: none;
+    }
+
+    .hide-rejected .llm-suggestion.rejected .suggestion-actions {
+        display: none !important;
+    }
+
+    .hide-rejected .llm-suggestion.rejected:hover::after {
+        display: none;
+    }
+
+    .llm-suggestion:hover {
+        transform: scale(1.02);
+        box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    }
+
+    /* Action buttons for suggestions */
+    .suggestion-actions {
+        display: none;
+        position: absolute;
+        top: -35px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: white;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        padding: 2px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        z-index: 1000;
+    }
+
+    .llm-suggestion:hover .suggestion-actions {
+        display: flex;
+    }
+
+    .suggestion-btn {
+        background: none;
+        border: none;
+        padding: 4px 6px;
+        cursor: pointer;
+        border-radius: 2px;
+        margin: 1px;
+    }
+
+    .suggestion-btn.approve:hover {
+        background-color: #28a745;
+        color: white;
+    }
+
+    .suggestion-btn.reject:hover {
+        background-color: #dc3545;
+        color: white;
+    }
+
+    /* Manual entity highlighting - base styles */
+    .manual-entity {
+        padding: 2px 4px;
+        border-radius: 4px;
+        cursor: pointer;
+        position: relative;
+        transition: all 0.2s;
+        border: 2px dashed; /* Dashed border to differentiate from LLM suggestions */
+        margin: 0 1px;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1); /* Subtle shadow for distinction */
+        animation: highlightPulse 0.5s ease-out;
+    }
+
+    /* Animation for newly created manual entities */
+    @keyframes highlightPulse {
+        0% {
+            transform: scale(1);
+            box-shadow: 0 0 0 0 rgba(0, 123, 255, 0.7);
+        }
+        50% {
+            transform: scale(1.05);
+            box-shadow: 0 0 10px 5px rgba(0, 123, 255, 0.3);
+        }
+        100% {
+            transform: scale(1);
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+    }
+
+    /* Manual entity colors by type - dashed borders with entity type colors */
+    .manual-entity.entity-SYMPTOM {
+        border-color: #E74C3C;
+        background-color: rgba(231, 76, 60, 0.15);
+        box-shadow: 0 1px 3px rgba(231, 76, 60, 0.2);
+    }
+
+    .manual-entity.entity-DISEASE {
+        border-color: #F39C12;
+        background-color: rgba(243, 156, 18, 0.15);
+        box-shadow: 0 1px 3px rgba(243, 156, 18, 0.2);
+    }
+
+    .manual-entity.entity-BODY_PART {
+        border-color: #1ABC9C;
+        background-color: rgba(26, 188, 156, 0.15);
+        box-shadow: 0 1px 3px rgba(26, 188, 156, 0.2);
+    }
+
+    .manual-entity.entity-MEDICATION {
+        border-color: #3498DB;
+        background-color: rgba(52, 152, 219, 0.15);
+        box-shadow: 0 1px 3px rgba(52, 152, 219, 0.2);
+    }
+
+    .manual-entity.entity-PROCEDURE {
+        border-color: #9B59B6;
+        background-color: rgba(155, 89, 182, 0.15);
+        box-shadow: 0 1px 3px rgba(155, 89, 182, 0.2);
+    }
+
+    .manual-entity:hover {
+        transform: scale(1.02);
+        box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    }
+
+    /* Annotation List */
+    .annotation-list {
+        max-height: 400px;
+        overflow-y: auto;
+    }
+
+    .annotation-item {
+        background: white;
+        border-radius: 8px;
+        padding: 0.75rem;
+        margin-bottom: 0.5rem;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border-left: 4px solid;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+
+    .annotation-item.llm-pending {
+        border-left-color: #6c757d;
+    }
+
+    .annotation-item.llm-approved {
+        border-left-color: #28a745;
+    }
+
+    .annotation-item.llm-rejected {
+        border-left-color: #dc3545;
+    }
+
+    .annotation-item.manual {
+        border-left-color: #17a2b8;
+    }
+
+    .annotation-text-span {
+        font-weight: 500;
+        margin-right: 0.5rem;
+    }
+
+    .annotation-type {
+        padding: 2px 8px;
+        border-radius: 12px;
+        font-size: 12px;
+        font-weight: 500;
+    }
+
+    .annotation-actions {
+        display: flex;
+        gap: 5px;
+    }
+
+    .entity-badge {
+        font-size: 0.75em;
+    }
+</style>
+
+<script>
+    let currentText = `{{ document.content|escapejs }}`;
+    let llmSuggestions = [];
+    let manualAnnotations = [];
+    let selectedEntityType = 'SYMPTOM';
+    let annotationId = {{ existing_annotation.id|default:"null" }};
+    let decisions = {};
+
+    // Load LLM suggestions (already de-overlapped by backend, but filter as safety net)
+    {% if llm_annotation %}
+    llmSuggestions = removeOverlappingEntities({{ llm_entities_json|safe }});
+    {% endif %}
+
+    // Remove overlapping entities, keeping only the longest span
+    function removeOverlappingEntities(entities) {
+        if (!entities || entities.length <= 1) return entities || [];
+
+        // Sort by span length descending (longest first), then confidence
+        const sorted = [...entities].sort((a, b) => {
+            const lenDiff = (b.end - b.start) - (a.end - a.start);
+            if (lenDiff !== 0) return lenDiff;
+            return (b.confidence || 0) - (a.confidence || 0);
+        });
+
+        // Greedily keep non-overlapping entities (longest span wins)
+        const kept = [];
+        for (const entity of sorted) {
+            const hasOverlap = kept.some(k =>
+                entity.start < k.end && entity.end > k.start
+            );
+            if (!hasOverlap) {
+                kept.push(entity);
+            }
+        }
+
+        // Return sorted by position
+        kept.sort((a, b) => a.start - b.start);
+        return kept;
+    }
+
+    // Load existing decisions if any
+    {% if existing_annotation %}
+    const existingEntities = {{ existing_entities_json|safe }} || [];
+    const existingDecisions = {{ existing_decisions_json|safe }} || {};
+
+    // Separate LLM and manual annotations
+    existingEntities.forEach(entity => {
+        if (entity.source === 'manual') {
+            manualAnnotations.push(entity);
+        } else {
+            // Update LLM suggestions with decisions
+            const llmEntity = llmSuggestions.find(s =>
+                s.text === entity.text && s.start === entity.start && s.end === entity.end
+            );
+            if (llmEntity) {
+                llmEntity.status = entity.status;
+                decisions[`${entity.start}-${entity.end}`] = entity.status;
+            }
+        }
+    });
+    {% endif %}
+
+    document.addEventListener('DOMContentLoaded', function() {
+        setupEntityTypeButtons();
+        setupTextSelection();
+        updateAnnotationDisplay();
+        updateAnnotationList();
+        updateStats();
+    });
+
+    function setupEntityTypeButtons() {
+        document.querySelectorAll('.entity-type-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                document.querySelectorAll('.entity-type-btn').forEach(b => b.classList.remove('selected'));
+                this.classList.add('selected');
+                selectedEntityType = this.dataset.type;
+            });
+        });
+    }
+
+    function setupTextSelection() {
+        const annotationText = document.getElementById('annotationText');
+
+        annotationText.addEventListener('mouseup', function(e) {
+            // Don't handle selection if clicking on manual entities
+            if (e.target.closest('.manual-entity')) {
+                return;
+            }
+
+            // For LLM suggestions, only block if NOT rejected
+            const closestLLM = e.target.closest('.llm-suggestion');
+            if (closestLLM && !closestLLM.classList.contains('rejected')) {
+                return;
+            }
+
+            const selection = window.getSelection();
+            const rawText = selection.toString();
+            const selectedText = rawText.trim();
+
+            if (selectedText.length > 0) {
+                const range = selection.getRangeAt(0);
+
+                // More precise overlap check - only check if selection is actually inside annotation spans
+                let selectionInside = false;
+                let insideRejectedLLM = false;
+                let current = range.commonAncestorContainer;
+
+                // Walk up the DOM to see if we're inside an annotation span
+                while (current && current !== annotationText) {
+                    if (current.nodeType === Node.ELEMENT_NODE) {
+                        if (current.classList.contains('llm-suggestion')) {
+                            selectionInside = true;
+                            // Check if this LLM suggestion is rejected
+                            if (current.classList.contains('rejected')) {
+                                insideRejectedLLM = true;
+                            }
+                            break;
+                        } else if (current.classList.contains('manual-entity')) {
+                            selectionInside = true;
+                            break;
+                        }
+                    }
+                    current = current.parentNode;
+                }
+
+                // Block if inside a non-rejected annotation
+                if (selectionInside && !insideRejectedLLM) {
+                    alert('Cannot create manual annotation over approved/pending LLM suggestions. Reject the entity first if you want to correct it.');
+                    selection.removeAllRanges();
+                    return;
+                }
+
+                // Use DOM-based offset calculation for accurate position
+                const leadingSpaces = rawText.length - rawText.trimStart().length;
+                const start = getTextOffset(annotationText, range.startContainer, range.startOffset) + leadingSpaces;
+                const end = start + selectedText.length;
+
+                // Validate position against original text
+                const textAtPosition = currentText.substring(start, end);
+                if (textAtPosition !== selectedText) {
+                    // Fallback to indexOf-based search
+                    const textPosition = findTextPosition(selectedText);
+                    if (textPosition === null) {
+                        alert('Could not determine text position. Please try selecting again.');
+                        selection.removeAllRanges();
+                        return;
+                    }
+                    if (!hasOverlap(textPosition.start, textPosition.end)) {
+                        createManualAnnotation(selectedText, textPosition.start, textPosition.end);
+                    } else {
+                        alert('This text overlaps with an existing annotation.');
+                    }
+                } else if (!hasOverlap(start, end)) {
+                    createManualAnnotation(selectedText, start, end);
+                } else {
+                    alert('This text overlaps with an existing annotation.');
+                }
+
+                selection.removeAllRanges();
+            }
+        });
+    }
+
+    function findTextPosition(selectedText) {
+        // Simple approach: find the text in the original content
+        // Try multiple occurrences to find the right one
+        let searchStart = 0;
+        let attempts = 0;
+        const maxAttempts = 10;
+
+        while (attempts < maxAttempts) {
+            const foundIndex = currentText.indexOf(selectedText, searchStart);
+            if (foundIndex === -1) {
+                break;
+            }
+
+            const start = foundIndex;
+            const end = foundIndex + selectedText.length;
+
+            // Check if this position conflicts with existing annotations
+            if (!hasOverlap(start, end)) {
+                return { start, end };
+            }
+
+            // Try next occurrence
+            searchStart = foundIndex + 1;
+            attempts++;
+        }
+
+        // If we couldn't find a non-overlapping occurrence, try first occurrence anyway
+        const firstIndex = currentText.indexOf(selectedText);
+        if (firstIndex !== -1) {
+            return { start: firstIndex, end: firstIndex + selectedText.length };
+        }
+
+        return null;
+    }
+
+    function getTextOffset(root, node, offset) {
+        let textOffset = 0;
+        let walker = document.createTreeWalker(
+            root,
+            NodeFilter.SHOW_TEXT,
+            null,
+            false
+        );
+
+        let currentNode;
+        while (currentNode = walker.nextNode()) {
+            if (currentNode === node) {
+                return textOffset + offset;
+            }
+            textOffset += currentNode.textContent.length;
+        }
+        return textOffset;
+    }
+
+    function hasOverlap(start, end) {
+        // Check against LLM suggestions - only consider approved or pending ones
+        // Rejected LLM suggestions should not block manual annotations
+        const llmOverlap = llmSuggestions.some(suggestion => {
+            const status = suggestion.status || 'pending';
+            const hasPositionOverlap = (start < suggestion.end && end > suggestion.start);
+
+            // Only block if the LLM suggestion is approved or pending (not rejected)
+            return hasPositionOverlap && (status === 'approved' || status === 'pending');
+        });
+
+        // Check against manual annotations - these always block
+        const manualOverlap = manualAnnotations.some(annotation =>
+            (start < annotation.end && end > annotation.start)
+        );
+
+        return llmOverlap || manualOverlap;
+    }
+
+    function createManualAnnotation(text, start, end) {
+        const annotation = {
+            text: text,
+            label: selectedEntityType,
+            start: start,
+            end: end,
+            source: 'manual',
+            status: 'approved',
+            attributes: {},
+            confidence: 1.0
+        };
+
+        manualAnnotations.push(annotation);
+        updateAnnotationDisplay();
+        updateAnnotationList();
+        updateStats();
+    }
+
+    function approveEntity(index) {
+        llmSuggestions[index].status = 'approved';
+        decisions[`${llmSuggestions[index].start}-${llmSuggestions[index].end}`] = 'approved';
+        updateAnnotationDisplay();
+        updateAnnotationList();
+        updateStats();
+    }
+
+    function rejectEntity(index) {
+        llmSuggestions[index].status = 'rejected';
+        decisions[`${llmSuggestions[index].start}-${llmSuggestions[index].end}`] = 'rejected';
+        updateAnnotationDisplay();
+        updateAnnotationList();
+        updateStats();
+    }
+
+    function removeManualAnnotation(index) {
+        manualAnnotations.splice(index, 1);
+        updateAnnotationDisplay();
+        updateAnnotationList();
+        updateStats();
+    }
+
+    function resolveOverlapsForDisplay(annotations) {
+        if (annotations.length <= 1) return annotations;
+
+        // Priority: approved > manual > pending > rejected, then longer span wins
+        const getPriority = (ann) => {
+            if (ann.status === 'approved') return 0;
+            if (ann.type === 'manual') return 1;
+            if (!ann.status || ann.status === 'pending') return 2;
+            return 3; // rejected
+        };
+
+        // Sort by priority first, then by span length (longer wins)
+        const sorted = [...annotations].sort((a, b) => {
+            const pA = getPriority(a);
+            const pB = getPriority(b);
+            if (pA !== pB) return pA - pB;
+            return (b.end - b.start) - (a.end - a.start);
+        });
+
+        // Greedily keep non-overlapping annotations by priority
+        const result = [];
+        for (const ann of sorted) {
+            const hasOverlap = result.some(existing =>
+                ann.start < existing.end && ann.end > existing.start
+            );
+            if (!hasOverlap) {
+                result.push(ann);
+            }
+        }
+
+        return result;
+    }
+
+    function updateAnnotationDisplay() {
+        const annotationText = document.getElementById('annotationText');
+
+        // Get all annotations
+        let allAnnotations = [];
+
+        // Add LLM suggestions
+        llmSuggestions.forEach((suggestion, index) => {
+            allAnnotations.push({
+                ...suggestion,
+                type: 'llm',
+                index: index
+            });
+        });
+
+        // Add manual annotations
+        manualAnnotations.forEach((annotation, index) => {
+            allAnnotations.push({
+                ...annotation,
+                type: 'manual',
+                index: index
+            });
+        });
+
+        // Filter out rejected annotations that overlap with approved/manual ones
+        // to prevent confusing strikethrough on accepted text
+        const approvedOrManual = allAnnotations.filter(a =>
+            a.status === 'approved' || a.type === 'manual'
+        );
+        allAnnotations = allAnnotations.filter(ann => {
+            if (ann.status !== 'rejected') return true;
+            const overlapsApproved = approvedOrManual.some(approved =>
+                !(ann.end <= approved.start || ann.start >= approved.end)
+            );
+            return !overlapsApproved;
+        });
+
+        // Resolve overlaps: keep highest-priority annotation at each position
+        allAnnotations = resolveOverlapsForDisplay(allAnnotations);
+
+        // Sort by start position for sequential rendering
+        allAnnotations.sort((a, b) => a.start - b.start);
+
+        // Simple flat rendering (no nesting issues since overlaps are resolved)
+        let html = '';
+        let lastPos = 0;
+
+        allAnnotations.forEach(annotation => {
+            // Skip if this annotation starts before the last rendered position
+            if (annotation.start < lastPos) return;
+
+            // Add plain text before this annotation
+            if (annotation.start > lastPos) {
+                html += escapeHtml(currentText.substring(lastPos, annotation.start));
+            }
+
+            // Render the annotation span
+            if (annotation.type === 'llm') {
+                const status = annotation.status || 'pending';
+                html += `<span class="llm-suggestion ${status} entity-${annotation.label}"
+                           title="LLM: ${annotation.label} - '${escapeHtml(annotation.text)}'"
+                           data-annotation-type="llm" data-annotation-index="${annotation.index}">`;
+            } else {
+                html += `<span class="manual-entity entity-${annotation.label}"
+                           title="Manual: ${annotation.label} - '${escapeHtml(annotation.text)}'"
+                           data-annotation-type="manual" data-annotation-index="${annotation.index}"
+                           onclick="removeManualAnnotation(${annotation.index})">`;
+            }
+            html += escapeHtml(currentText.substring(annotation.start, annotation.end));
+            html += '</span>';
+
+            lastPos = annotation.end;
+        });
+
+        // Add remaining text after last annotation
+        if (lastPos < currentText.length) {
+            html += escapeHtml(currentText.substring(lastPos));
+        }
+
+        annotationText.innerHTML = html;
+
+        // Add hover actions for LLM suggestions
+        addSuggestionActions();
+    }
+
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    function addSuggestionActions() {
+        // Add action buttons on hover for LLM suggestions
+        document.querySelectorAll('.llm-suggestion').forEach(span => {
+            const index = parseInt(span.dataset.annotationIndex);
+
+            // Remove existing actions if any
+            const existingActions = span.querySelector('.suggestion-actions');
+            if (existingActions) existingActions.remove();
+
+            // Create action buttons
+            const actions = document.createElement('div');
+            actions.className = 'suggestion-actions';
+            actions.innerHTML = `
+                <button class="suggestion-btn approve" onclick="event.stopPropagation(); approveEntity(${index})" title="Approve">✓</button>
+                <button class="suggestion-btn reject" onclick="event.stopPropagation(); rejectEntity(${index})" title="Reject">✗</button>
+            `;
+            span.appendChild(actions);
+        });
+    }
+
+    function updateAnnotationList() {
+        const annotationList = document.getElementById('annotationList');
+
+        if (llmSuggestions.length === 0 && manualAnnotations.length === 0) {
+            annotationList.innerHTML = '<div class="text-center text-muted">No annotations available.</div>';
+            return;
+        }
+
+        let html = '';
+
+        // Add LLM suggestions (no overlaps - already resolved)
+        llmSuggestions.forEach((suggestion, index) => {
+            const status = suggestion.status || 'pending';
+            const statusClass = status === 'approved' ? 'llm-approved' :
+                               status === 'rejected' ? 'llm-rejected' : 'llm-pending';
+
+            html += `
+                <div class="annotation-item ${statusClass}" data-start="${suggestion.start}" data-end="${suggestion.end}">
+                    <div>
+                        <span class="annotation-text-span">"${escapeHtml(suggestion.text)}"</span>
+                        <span class="annotation-type entity-badge entity-${suggestion.label}">${suggestion.label}</span>
+                        <span class="badge badge-sm ${status === 'approved' ? 'bg-success' : status === 'rejected' ? 'bg-danger' : 'bg-secondary'}">${status}</span>
+                        <small class="text-muted ms-1">[${suggestion.start}-${suggestion.end}]</small>
+                    </div>
+                    <div class="annotation-actions">
+                        ${status !== 'approved' ? `<button type="button" class="btn btn-sm btn-success" onclick="approveEntity(${index})">✓</button>` : ''}
+                        ${status !== 'rejected' ? `<button type="button" class="btn btn-sm btn-danger" onclick="rejectEntity(${index})">✗</button>` : ''}
+                    </div>
+                </div>
+            `;
+        });
+
+        // Add manual annotations (no overlaps - prevented at creation time)
+        manualAnnotations.forEach((annotation, index) => {
+            html += `
+                <div class="annotation-item manual" data-start="${annotation.start}" data-end="${annotation.end}">
+                    <div>
+                        <span class="annotation-text-span">"${escapeHtml(annotation.text)}"</span>
+                        <span class="annotation-type entity-badge entity-${annotation.label}">${annotation.label}</span>
+                        <span class="badge badge-sm bg-info">manual</span>
+                        <small class="text-muted ms-1">[${annotation.start}-${annotation.end}]</small>
+                    </div>
+                    <div class="annotation-actions">
+                        <button type="button" class="btn btn-sm btn-outline-danger" onclick="removeManualAnnotation(${index})">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                </div>
+            `;
+        });
+
+        annotationList.innerHTML = html;
+    }
+
+
+    function updateStats() {
+        const approved = llmSuggestions.filter(s => s.status === 'approved').length;
+        const rejected = llmSuggestions.filter(s => s.status === 'rejected').length;
+        const processed = approved + rejected;
+        const agreementRate = llmSuggestions.length > 0 ? (approved / Math.max(processed, 1) * 100) : 0;
+
+        document.getElementById('totalCount').textContent = llmSuggestions.length + manualAnnotations.length;
+        document.getElementById('approvedCount').textContent = approved;
+        document.getElementById('rejectedCount').textContent = rejected;
+        document.getElementById('manualCount').textContent = manualAnnotations.length;
+
+        // Update optional stats elements if they exist
+        const agreementRateEl = document.getElementById('agreementRate');
+        const processedCountEl = document.getElementById('processedCount');
+        const llmSuggestionsEl = document.getElementById('llmSuggestions');
+        const manualAdditionsEl = document.getElementById('manualAdditions');
+
+        if (agreementRateEl) agreementRateEl.textContent = `${agreementRate.toFixed(1)}%`;
+        if (processedCountEl) processedCountEl.textContent = processed;
+        if (llmSuggestionsEl) llmSuggestionsEl.textContent = llmSuggestions.length;
+        if (manualAdditionsEl) manualAdditionsEl.textContent = manualAnnotations.length;
+    }
+
+    function resetDecisions() {
+        if (!confirm('Are you sure you want to reset all decisions? This will clear all approve/reject choices.')) {
+            return;
+        }
+
+        llmSuggestions.forEach(suggestion => {
+            delete suggestion.status;
+        });
+        decisions = {};
+
+        updateAnnotationDisplay();
+        updateAnnotationList();
+        updateStats();
+    }
+
+    function toggleRejectedVisibility() {
+        const annotationText = document.getElementById('annotationText');
+        const toggle = document.getElementById('hideRejectedToggle');
+
+        if (toggle.checked) {
+            annotationText.classList.add('hide-rejected');
+        } else {
+            annotationText.classList.remove('hide-rejected');
+        }
+    }
+
+    function setSaveLoading(loading) {
+        const btn = document.getElementById('saveBtn');
+        const feedback = document.getElementById('saveFeedback');
+        if (loading) {
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Saving...';
+            feedback.style.display = 'none';
+            showOverlay('saving');
+        } else {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-save me-2"></i>Save Annotation Decisions';
+        }
+    }
+
+    function showOverlay(state, errorMsg) {
+        const overlay = document.getElementById('saveOverlay');
+        const spinner = document.getElementById('overlaySpinner');
+        const success = document.getElementById('overlaySuccess');
+        const error = document.getElementById('overlayError');
+        spinner.style.display = state === 'saving' ? 'block' : 'none';
+        success.style.display = state === 'success' ? 'block' : 'none';
+        error.style.display = state === 'error' ? 'block' : 'none';
+        if (state === 'error') {
+            document.getElementById('overlayErrorMsg').textContent = errorMsg || 'Unknown error';
+        }
+        if (state === 'success') {
+            const bar = document.getElementById('overlayProgressBar');
+            bar.style.width = '0%';
+            requestAnimationFrame(() => { bar.style.transition = 'width 1.4s linear'; bar.style.width = '100%'; });
+        }
+        overlay.style.display = 'flex';
+    }
+
+    function hideOverlay() {
+        document.getElementById('saveOverlay').style.display = 'none';
+        document.getElementById('saveBtn').disabled = false;
+        document.getElementById('saveBtn').innerHTML = '<i class="fas fa-save me-2"></i>Save Annotation Decisions';
+    }
+
+    function showSaveFeedback(type, message, detail) {
+        const feedback = document.getElementById('saveFeedback');
+        const colors = { success: 'success', info: 'info', warning: 'warning', error: 'danger' };
+        const icons = { success: 'check-circle', info: 'info-circle', warning: 'exclamation-triangle', error: 'times-circle' };
+        feedback.innerHTML = '<div class="alert alert-' + colors[type] + ' py-2 px-3 mb-0 small">' +
+            '<i class="fas fa-' + icons[type] + ' me-1"></i> <strong>' + message + '</strong>' +
+            (detail ? '<br>' + detail : '') +
+            '</div>';
+        feedback.style.display = 'block';
+    }
+
+    function saveAnnotations() {
+        // Combine all annotations
+        let allAnnotations = [];
+
+        // Add LLM suggestions with their decisions
+        llmSuggestions.forEach(suggestion => {
+            allAnnotations.push({
+                ...suggestion,
+                source: 'llm',
+                status: suggestion.status || 'pending'
+            });
+        });
+
+        // Add manual annotations
+        manualAnnotations.forEach(annotation => {
+            allAnnotations.push(annotation);
+        });
+
+        if (allAnnotations.length === 0) {
+            showSaveFeedback('warning', 'Nothing to save', 'Please make some annotation decisions first.');
+            return;
+        }
+
+        // Get CSRF token
+        const csrfEl = document.querySelector('[name=csrfmiddlewaretoken]');
+        if (!csrfEl) {
+            showSaveFeedback('error', 'CSRF token not found', 'Please refresh the page and try again.');
+            return;
+        }
+
+        // Show loading state on button
+        setSaveLoading(true);
+
+        // Submit to server
+        fetch('{% url "annotation:llm_assisted_annotate" document.id %}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrfEl.value
+            },
+            body: JSON.stringify({
+                annotations: allAnnotations,
+                decisions: decisions,
+                annotation_id: annotationId
+            })
+        })
+        .then(response => {
+            if (!response.ok) throw new Error('Server returned ' + response.status);
+            return response.json();
+        })
+        .then(data => {
+            if (data.success) {
+                const g = data.gamification;
+                const statusSuffix = (g && g.is_status_only) ? ' | ' + g.new_total + ' pts (Level ' + g.level + ')' : '';
+
+                if (data.is_completed) {
+                    showOverlay('success');
+                    document.getElementById('saveBtn').disabled = true;
+                    if (g && !g.is_status_only) {
+                        showGamificationToast(data);
+                        setTimeout(function() {
+                            window.location.href = '{% url "annotation:annotator_documents" %}';
+                        }, 3000);
+                    } else {
+                        setTimeout(function() {
+                            window.location.href = '{% url "annotation:annotator_documents" %}';
+                        }, 1500);
+                    }
+                } else {
+                    // Partial save - hide overlay and show inline feedback
+                    hideOverlay();
+                    const stats = data.decision_stats || {};
+                    const pending = stats.pending || 0;
+                    const approved = stats.approved || 0;
+                    const rejected = stats.rejected || 0;
+                    showSaveFeedback('info', 'Progress saved!',
+                        approved + ' approved, ' + rejected + ' rejected — ' +
+                        '<strong>' + pending + ' entities still need review</strong>' + statusSuffix);
+                }
+            } else {
+                showOverlay('error', data.error || 'Unknown error');
+                document.getElementById('saveBtn').disabled = false;
+                document.getElementById('saveBtn').innerHTML = '<i class="fas fa-save me-2"></i>Save Annotation Decisions';
+            }
+        })
+        .catch(error => {
+            console.error('Save error:', error);
+            showOverlay('error', error.message);
+            document.getElementById('saveBtn').disabled = false;
+            document.getElementById('saveBtn').innerHTML = '<i class="fas fa-save me-2"></i>Save Annotation Decisions';
+        });
+    }
+</script>
+{% endblock %}
+
+{% block extra_js %}
+<!-- CSRF Token for AJAX -->
+<input type="hidden" name="csrfmiddlewaretoken" value="{{ csrf_token }}">
+{% endblock %}

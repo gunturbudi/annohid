@@ -1,0 +1,993 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Overlapping Entity Annotation - {{ document.title }}{% endblock %}
+
+{% block extra_css %}
+<style>
+/* Overlapping Entity Annotation Styles */
+.annotation-container {
+    background: #fff;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 20px;
+}
+
+.text-display {
+    font-family: 'Courier New', monospace;
+    font-size: 16px;
+    line-height: 1.8;
+    padding: 20px;
+    background: #f8f9fa;
+    border: 1px solid #e9ecef;
+    border-radius: 6px;
+    position: relative;
+    margin-bottom: 20px;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+}
+
+/* Entity highlighting with support for overlapping */
+.entity-highlight {
+    position: relative;
+    display: inline;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+/* Multi-layer highlighting for overlaps */
+.entity-layer-1 { background-color: rgba(255, 193, 7, 0.3); border-bottom: 2px solid #ffc107; }
+.entity-layer-2 { background-color: rgba(220, 53, 69, 0.3); border-bottom: 2px solid #dc3545; }
+.entity-layer-3 { background-color: rgba(25, 135, 84, 0.3); border-bottom: 2px solid #198754; }
+.entity-layer-4 { background-color: rgba(13, 110, 253, 0.3); border-bottom: 2px solid #0d6efd; }
+.entity-layer-5 { background-color: rgba(111, 66, 193, 0.3); border-bottom: 2px solid #6f42c1; }
+
+.entity-highlight:hover {
+    opacity: 0.8;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}
+
+.entity-highlight.selected {
+    box-shadow: 0 0 0 2px #0d6efd;
+    background-color: rgba(13, 110, 253, 0.5) !important;
+}
+
+/* Entity tooltip */
+.entity-tooltip {
+    position: absolute;
+    background: #333;
+    color: white;
+    padding: 8px 12px;
+    border-radius: 4px;
+    font-size: 12px;
+    z-index: 1000;
+    white-space: nowrap;
+    opacity: 0;
+    transition: opacity 0.2s;
+    pointer-events: none;
+}
+
+.entity-tooltip.show {
+    opacity: 1;
+}
+
+/* Entity creation selection */
+.text-selection {
+    background-color: rgba(0, 123, 255, 0.3);
+    border: 2px dashed #007bff;
+}
+
+/* Entity list sidebar */
+.entity-sidebar {
+    max-height: 600px;
+    overflow-y: auto;
+    background: #f8f9fa;
+    border-radius: 6px;
+    padding: 15px;
+}
+
+.entity-item {
+    background: white;
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    padding: 10px;
+    margin-bottom: 10px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.entity-item:hover {
+    background: #e9ecef;
+    border-color: #0d6efd;
+}
+
+.entity-item.selected {
+    background: #cfe2ff;
+    border-color: #0d6efd;
+}
+
+.entity-type-badge {
+    font-size: 11px;
+    padding: 3px 8px;
+    border-radius: 12px;
+    font-weight: bold;
+    color: white;
+    margin-right: 8px;
+}
+
+.entity-text {
+    font-weight: 500;
+    margin-bottom: 5px;
+}
+
+.entity-details {
+    font-size: 12px;
+    color: #6c757d;
+}
+
+/* Overlap visualization */
+.overlap-group {
+    border-left: 4px solid #6c757d;
+    margin-left: 10px;
+    padding-left: 10px;
+    margin-bottom: 15px;
+}
+
+.overlap-header {
+    font-weight: bold;
+    color: #495057;
+    margin-bottom: 8px;
+    font-size: 13px;
+}
+
+/* Entity creation form */
+.entity-creation-form {
+    background: white;
+    border: 1px solid #dee2e6;
+    border-radius: 6px;
+    padding: 20px;
+    margin-bottom: 20px;
+    display: none;
+}
+
+.entity-creation-form.show {
+    display: block;
+}
+
+/* Action buttons */
+.annotation-actions {
+    background: white;
+    border: 1px solid #dee2e6;
+    border-radius: 6px;
+    padding: 15px;
+    margin-bottom: 20px;
+}
+
+.btn-entity-type {
+    margin: 2px;
+    font-size: 12px;
+    padding: 5px 10px;
+}
+
+/* Statistics display */
+.annotation-stats {
+    background: #e3f2fd;
+    border: 1px solid #90caf9;
+    border-radius: 6px;
+    padding: 15px;
+    margin-bottom: 20px;
+}
+
+.stat-item {
+    display: inline-block;
+    margin-right: 20px;
+    font-weight: 500;
+}
+
+/* Progress indicator */
+.progress-container {
+    margin-bottom: 20px;
+}
+
+.overlap-indicator {
+    position: absolute;
+    top: -8px;
+    right: -8px;
+    background: #dc3545;
+    color: white;
+    border-radius: 50%;
+    width: 16px;
+    height: 16px;
+    font-size: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-md-9">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h2>Overlapping Entity Annotation</h2>
+                <div>
+                    <button id="saveAnnotation" class="btn btn-success">
+                        <i class="fas fa-save"></i> Save Annotation
+                    </button>
+                    <a href="{% url 'annotation:annotator_documents' %}" class="btn btn-secondary">
+                        <i class="fas fa-arrow-left"></i> Back to Documents
+                    </a>
+                    <div id="saveFeedback" class="mt-2" style="display:none;"></div>
+                </div>
+            </div>
+
+            <!-- Document Information -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5>Document: {{ document.title|default:"Untitled" }}</h5>
+                </div>
+                <div class="card-body">
+                    <p><strong>Source:</strong> {{ document.source_file|default:"Direct input" }}</p>
+                    <p><strong>Length:</strong> {{ document.character_count }} characters, {{ document.word_count }} words</p>
+                    <p><strong>Status:</strong>
+                        <span class="badge bg-{{ document.status|default:'secondary' }}">
+                            {{ document.get_status_display }}
+                        </span>
+                    </p>
+                </div>
+            </div>
+
+            <!-- Annotation Statistics -->
+            <div class="annotation-stats">
+                <h6>Annotation Progress</h6>
+                <div class="row">
+                    <div class="col-md-3">
+                        <div class="stat-item">
+                            <span id="totalEntities">0</span> Total Entities
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="stat-item">
+                            <span id="overlappingEntities">0</span> Overlapping
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="stat-item">
+                            <span id="overlapGroups">0</span> Overlap Groups
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="stat-item">
+                            <span id="maxOverlapDepth">0</span> Max Depth
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Annotation Actions -->
+            <div class="annotation-actions">
+                <h6>Quick Entity Types</h6>
+                <div id="entityTypeButtons">
+                    <button class="btn btn-outline-primary btn-entity-type" data-type="SYMPTOM">Symptom</button>
+                    <button class="btn btn-outline-success btn-entity-type" data-type="DISEASE">Disease</button>
+                    <button class="btn btn-outline-warning btn-entity-type" data-type="BODY_PART">Body Part</button>
+                    <button class="btn btn-outline-info btn-entity-type" data-type="MEDICATION">Medication</button>
+                    <button class="btn btn-outline-danger btn-entity-type" data-type="PROCEDURE">Procedure</button>
+                    <button class="btn btn-outline-secondary btn-entity-type" data-type="SEVERITY">Severity</button>
+                    <button class="btn btn-outline-dark btn-entity-type" data-type="FREQUENCY">Frequency</button>
+                </div>
+                <div class="mt-2">
+                    <button id="clearSelection" class="btn btn-outline-secondary btn-sm">Clear Selection</button>
+                    <button id="deleteSelected" class="btn btn-outline-danger btn-sm">Delete Selected</button>
+                    <button id="showOverlaps" class="btn btn-outline-primary btn-sm">Highlight Overlaps</button>
+                </div>
+            </div>
+
+            <!-- Entity Creation Form -->
+            <div id="entityCreationForm" class="entity-creation-form">
+                <h6>Create New Entity</h6>
+                <form id="newEntityForm">
+                    <div class="row">
+                        <div class="col-md-4">
+                            <label for="entityType" class="form-label">Entity Type</label>
+                            <select id="entityType" class="form-select" required>
+                                <option value="">Select type...</option>
+                                <option value="SYMPTOM">Symptom</option>
+                                <option value="DISEASE">Disease</option>
+                                <option value="BODY_PART">Body Part</option>
+                                <option value="MEDICATION">Medication</option>
+                                <option value="PROCEDURE">Procedure</option>
+                                <option value="SEVERITY">Severity Level</option>
+                                <option value="FREQUENCY">Frequency</option>
+                                <option value="DURATION">Duration</option>
+                                <option value="DOSAGE">Dosage Information</option>
+                                <option value="LOCATION">Anatomical Location</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label for="entityConfidence" class="form-label">Confidence</label>
+                            <input type="range" id="entityConfidence" class="form-range" min="0" max="100" value="100">
+                            <small class="text-muted">Confidence: <span id="confidenceValue">100</span>%</small>
+                        </div>
+                        <div class="col-md-4">
+                            <label for="entitySource" class="form-label">Source</label>
+                            <select id="entitySource" class="form-select">
+                                <option value="manual">Manual</option>
+                                <option value="llm">LLM</option>
+                                <option value="hybrid">Hybrid</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="row mt-3">
+                        <div class="col-md-6">
+                            <label for="selectedText" class="form-label">Selected Text</label>
+                            <input type="text" id="selectedText" class="form-control" readonly>
+                        </div>
+                        <div class="col-md-3">
+                            <label for="startOffset" class="form-label">Start Position</label>
+                            <input type="number" id="startOffset" class="form-control" readonly>
+                        </div>
+                        <div class="col-md-3">
+                            <label for="endOffset" class="form-label">End Position</label>
+                            <input type="number" id="endOffset" class="form-control" readonly>
+                        </div>
+                    </div>
+                    <div class="mt-3">
+                        <button type="submit" class="btn btn-primary">Create Entity</button>
+                        <button type="button" id="cancelEntity" class="btn btn-secondary">Cancel</button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- Text Display Area -->
+            <div class="annotation-container">
+                <h6>Document Text</h6>
+                <div id="textDisplay" class="text-display" data-document-id="{{ document.id }}">
+                    {{ document.content }}
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-3">
+            <!-- Entity Sidebar -->
+            <div class="entity-sidebar">
+                <h6>Entities</h6>
+                <div id="entityList">
+                    <!-- Entities will be populated here -->
+                </div>
+
+                <!-- Overlap Groups -->
+                <div id="overlapGroups" class="mt-4">
+                    <h6>Overlap Groups</h6>
+                    <div id="overlapList">
+                        <!-- Overlap groups will be populated here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Entity Tooltip -->
+<div id="entityTooltip" class="entity-tooltip"></div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+class OverlappingEntityAnnotator {
+    constructor() {
+        this.entities = [];
+        this.selectedEntity = null;
+        this.selectedText = null;
+        this.documentId = document.getElementById('textDisplay').dataset.documentId;
+        this.isSelecting = false;
+        this.currentSelection = null;
+
+        this.init();
+    }
+
+    init() {
+        this.setupEventListeners();
+        this.loadExistingAnnotations();
+        this.setupTextSelection();
+    }
+
+    setupEventListeners() {
+        // Entity type buttons
+        document.querySelectorAll('.btn-entity-type').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const entityType = e.target.dataset.type;
+                this.startEntityCreation(entityType);
+            });
+        });
+
+        // Entity creation form
+        document.getElementById('newEntityForm').addEventListener('submit', (e) => {
+            e.preventDefault();
+            this.createEntity();
+        });
+
+        document.getElementById('cancelEntity').addEventListener('click', () => {
+            this.cancelEntityCreation();
+        });
+
+        // Confidence slider
+        document.getElementById('entityConfidence').addEventListener('input', (e) => {
+            document.getElementById('confidenceValue').textContent = e.target.value;
+        });
+
+        // Action buttons
+        document.getElementById('clearSelection').addEventListener('click', () => {
+            this.clearSelection();
+        });
+
+        document.getElementById('deleteSelected').addEventListener('click', () => {
+            this.deleteSelectedEntity();
+        });
+
+        document.getElementById('showOverlaps').addEventListener('click', () => {
+            this.highlightOverlaps();
+        });
+
+        // Save annotation
+        document.getElementById('saveAnnotation').addEventListener('click', () => {
+            this.saveAnnotation();
+        });
+    }
+
+    setupTextSelection() {
+        const textDisplay = document.getElementById('textDisplay');
+
+        textDisplay.addEventListener('mouseup', (e) => {
+            const selection = window.getSelection();
+            if (selection.toString().trim()) {
+                this.handleTextSelection(selection);
+            }
+        });
+
+        // Prevent default selection behavior on entities
+        textDisplay.addEventListener('mousedown', (e) => {
+            if (e.target.classList.contains('entity-highlight')) {
+                e.preventDefault();
+                this.selectEntity(e.target);
+            }
+        });
+    }
+
+    handleTextSelection(selection) {
+        const range = selection.getRangeAt(0);
+        const textDisplay = document.getElementById('textDisplay');
+
+        // Calculate character offsets
+        const startOffset = this.getTextOffset(textDisplay, range.startContainer, range.startOffset);
+        const endOffset = this.getTextOffset(textDisplay, range.endContainer, range.endOffset);
+        const selectedText = selection.toString().trim();
+
+        if (selectedText && startOffset !== endOffset) {
+            this.currentSelection = {
+                text: selectedText,
+                startOffset: startOffset,
+                endOffset: endOffset,
+                range: range.cloneRange()
+            };
+
+            // Show entity creation form
+            this.showEntityCreationForm();
+        }
+
+        selection.removeAllRanges();
+    }
+
+    getTextOffset(container, node, offset) {
+        let textOffset = 0;
+        const walker = document.createTreeWalker(
+            container,
+            NodeFilter.SHOW_TEXT,
+            null,
+            false
+        );
+
+        let currentNode;
+        while (currentNode = walker.nextNode()) {
+            if (currentNode === node) {
+                return textOffset + offset;
+            }
+            textOffset += currentNode.textContent.length;
+        }
+
+        return textOffset;
+    }
+
+    startEntityCreation(entityType) {
+        if (this.currentSelection) {
+            document.getElementById('entityType').value = entityType;
+            this.showEntityCreationForm();
+        } else {
+            alert('Please select text first by clicking and dragging in the document.');
+        }
+    }
+
+    showEntityCreationForm() {
+        if (!this.currentSelection) return;
+
+        const form = document.getElementById('entityCreationForm');
+        const selectedTextInput = document.getElementById('selectedText');
+        const startOffsetInput = document.getElementById('startOffset');
+        const endOffsetInput = document.getElementById('endOffset');
+
+        selectedTextInput.value = this.currentSelection.text;
+        startOffsetInput.value = this.currentSelection.startOffset;
+        endOffsetInput.value = this.currentSelection.endOffset;
+
+        form.classList.add('show');
+        document.getElementById('entityType').focus();
+    }
+
+    cancelEntityCreation() {
+        document.getElementById('entityCreationForm').classList.remove('show');
+        this.currentSelection = null;
+        this.clearSelection();
+    }
+
+    createEntity() {
+        if (!this.currentSelection) return;
+
+        const entityType = document.getElementById('entityType').value;
+        const confidence = parseInt(document.getElementById('entityConfidence').value) / 100;
+        const source = document.getElementById('entitySource').value;
+
+        if (!entityType) {
+            alert('Please select an entity type.');
+            return;
+        }
+
+        const entity = {
+            id: this.generateEntityId(),
+            text: this.currentSelection.text,
+            startOffset: this.currentSelection.startOffset,
+            endOffset: this.currentSelection.endOffset,
+            entityType: entityType,
+            confidence: confidence,
+            source: source,
+            status: 'pending'
+        };
+
+        this.entities.push(entity);
+        this.renderEntities();
+        this.updateStatistics();
+        this.cancelEntityCreation();
+    }
+
+    generateEntityId() {
+        return 'entity_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+    }
+
+    renderEntities() {
+        const textDisplay = document.getElementById('textDisplay');
+        const originalText = textDisplay.textContent;
+
+        // Clear existing highlights
+        textDisplay.innerHTML = originalText;
+
+        // Sort entities by start position for proper rendering
+        const sortedEntities = [...this.entities].sort((a, b) => a.startOffset - b.startOffset);
+
+        // Group overlapping entities
+        const overlapGroups = this.identifyOverlapGroups(sortedEntities);
+
+        // Render entities with overlap handling
+        this.renderOverlappingEntities(textDisplay, sortedEntities, overlapGroups);
+
+        // Update entity list
+        this.updateEntityList(overlapGroups);
+    }
+
+    identifyOverlapGroups(entities) {
+        const groups = [];
+        const processed = new Set();
+
+        for (let i = 0; i < entities.length; i++) {
+            if (processed.has(entities[i].id)) continue;
+
+            const group = [entities[i]];
+            processed.add(entities[i].id);
+
+            // Find all entities that overlap with this one
+            for (let j = i + 1; j < entities.length; j++) {
+                if (processed.has(entities[j].id)) continue;
+
+                if (this.entitiesOverlap(entities[i], entities[j])) {
+                    group.push(entities[j]);
+                    processed.add(entities[j].id);
+                }
+            }
+
+            groups.push(group);
+        }
+
+        return groups;
+    }
+
+    entitiesOverlap(entity1, entity2) {
+        return !(entity1.endOffset <= entity2.startOffset || entity1.startOffset >= entity2.endOffset);
+    }
+
+    renderOverlappingEntities(container, entities, overlapGroups) {
+        let html = container.textContent;
+        const insertions = [];
+
+        // Collect all insertion points
+        entities.forEach((entity, index) => {
+            const layerClass = this.getEntityLayerClass(entity, overlapGroups);
+            const overlapCount = this.getEntityOverlapCount(entity, entities);
+
+            insertions.push({
+                position: entity.startOffset,
+                type: 'start',
+                entity: entity,
+                html: `<span class="entity-highlight ${layerClass}" data-entity-id="${entity.id}" data-entity-type="${entity.entityType}">`
+            });
+
+            insertions.push({
+                position: entity.endOffset,
+                type: 'end',
+                entity: entity,
+                html: overlapCount > 1 ? `<span class="overlap-indicator">${overlapCount}</span></span>` : '</span>'
+            });
+        });
+
+        // Sort insertions by position (end tags before start tags at same position)
+        insertions.sort((a, b) => {
+            if (a.position === b.position) {
+                return a.type === 'end' ? -1 : 1;
+            }
+            return a.position - b.position;
+        });
+
+        // Apply insertions
+        let offset = 0;
+        insertions.forEach(insertion => {
+            const position = insertion.position + offset;
+            html = html.slice(0, position) + insertion.html + html.slice(position);
+            offset += insertion.html.length;
+        });
+
+        container.innerHTML = html;
+
+        // Add event listeners to entity highlights
+        container.querySelectorAll('.entity-highlight').forEach(element => {
+            element.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.selectEntity(element);
+            });
+
+            element.addEventListener('mouseenter', (e) => {
+                this.showEntityTooltip(e, element);
+            });
+
+            element.addEventListener('mouseleave', () => {
+                this.hideEntityTooltip();
+            });
+        });
+    }
+
+    getEntityLayerClass(entity, overlapGroups) {
+        for (let i = 0; i < overlapGroups.length; i++) {
+            const groupIndex = overlapGroups[i].findIndex(e => e.id === entity.id);
+            if (groupIndex !== -1) {
+                return `entity-layer-${Math.min(groupIndex + 1, 5)}`;
+            }
+        }
+        return 'entity-layer-1';
+    }
+
+    getEntityOverlapCount(entity, allEntities) {
+        let count = 0;
+        allEntities.forEach(other => {
+            if (other.id !== entity.id && this.entitiesOverlap(entity, other)) {
+                count++;
+            }
+        });
+        return count + 1; // Include the entity itself
+    }
+
+    updateEntityList(overlapGroups) {
+        const entityList = document.getElementById('entityList');
+        const overlapList = document.getElementById('overlapList');
+
+        // Update individual entities
+        let entityHtml = '';
+        this.entities.forEach(entity => {
+            const typeColor = this.getEntityTypeColor(entity.entityType);
+            entityHtml += `
+                <div class="entity-item" data-entity-id="${entity.id}">
+                    <div class="entity-text">
+                        <span class="entity-type-badge" style="background-color: ${typeColor}">
+                            ${entity.entityType}
+                        </span>
+                        "${entity.text}"
+                    </div>
+                    <div class="entity-details">
+                        Position: ${entity.startOffset}-${entity.endOffset} |
+                        Confidence: ${Math.round(entity.confidence * 100)}% |
+                        Source: ${entity.source}
+                    </div>
+                </div>
+            `;
+        });
+        entityList.innerHTML = entityHtml;
+
+        // Update overlap groups
+        let overlapHtml = '';
+        overlapGroups.forEach((group, index) => {
+            if (group.length > 1) {
+                overlapHtml += `
+                    <div class="overlap-group">
+                        <div class="overlap-header">Group ${index + 1} (${group.length} entities)</div>
+                `;
+                group.forEach(entity => {
+                    const typeColor = this.getEntityTypeColor(entity.entityType);
+                    overlapHtml += `
+                        <div class="entity-item" data-entity-id="${entity.id}">
+                            <div class="entity-text">
+                                <span class="entity-type-badge" style="background-color: ${typeColor}">
+                                    ${entity.entityType}
+                                </span>
+                                "${entity.text}"
+                            </div>
+                        </div>
+                    `;
+                });
+                overlapHtml += '</div>';
+            }
+        });
+        overlapList.innerHTML = overlapHtml;
+
+        // Add click handlers
+        document.querySelectorAll('.entity-item').forEach(item => {
+            item.addEventListener('click', (e) => {
+                const entityId = e.currentTarget.dataset.entityId;
+                this.selectEntityById(entityId);
+            });
+        });
+    }
+
+    getEntityTypeColor(entityType) {
+        const colors = {
+            'SYMPTOM': '#ffc107',
+            'DISEASE': '#dc3545',
+            'BODY_PART': '#198754',
+            'MEDICATION': '#0d6efd',
+            'PROCEDURE': '#6f42c1',
+            'SEVERITY': '#fd7e14',
+            'FREQUENCY': '#20c997',
+            'DURATION': '#e83e8c',
+            'DOSAGE': '#6c757d',
+            'LOCATION': '#0dcaf0'
+        };
+        return colors[entityType] || '#6c757d';
+    }
+
+    selectEntity(element) {
+        // Clear previous selection
+        document.querySelectorAll('.entity-highlight.selected').forEach(el => {
+            el.classList.remove('selected');
+        });
+        document.querySelectorAll('.entity-item.selected').forEach(el => {
+            el.classList.remove('selected');
+        });
+
+        // Select new entity
+        element.classList.add('selected');
+        const entityId = element.dataset.entityId;
+        const entity = this.entities.find(e => e.id === entityId);
+
+        if (entity) {
+            this.selectedEntity = entity;
+
+            // Highlight in sidebar
+            document.querySelectorAll(`[data-entity-id="${entityId}"]`).forEach(el => {
+                el.classList.add('selected');
+            });
+        }
+    }
+
+    selectEntityById(entityId) {
+        const element = document.querySelector(`[data-entity-id="${entityId}"]`);
+        if (element) {
+            this.selectEntity(element);
+        }
+    }
+
+    showEntityTooltip(event, element) {
+        const entityId = element.dataset.entityId;
+        const entity = this.entities.find(e => e.id === entityId);
+
+        if (entity) {
+            const tooltip = document.getElementById('entityTooltip');
+            const overlapCount = this.getEntityOverlapCount(entity, this.entities);
+
+            tooltip.innerHTML = `
+                <strong>${entity.entityType}</strong><br>
+                "${entity.text}"<br>
+                Confidence: ${Math.round(entity.confidence * 100)}%<br>
+                ${overlapCount > 1 ? `Overlaps: ${overlapCount - 1}` : 'No overlaps'}
+            `;
+
+            tooltip.style.left = event.pageX + 10 + 'px';
+            tooltip.style.top = event.pageY - 10 + 'px';
+            tooltip.classList.add('show');
+        }
+    }
+
+    hideEntityTooltip() {
+        document.getElementById('entityTooltip').classList.remove('show');
+    }
+
+    clearSelection() {
+        document.querySelectorAll('.entity-highlight.selected').forEach(el => {
+            el.classList.remove('selected');
+        });
+        document.querySelectorAll('.entity-item.selected').forEach(el => {
+            el.classList.remove('selected');
+        });
+        this.selectedEntity = null;
+    }
+
+    deleteSelectedEntity() {
+        if (this.selectedEntity) {
+            if (confirm(`Delete entity "${this.selectedEntity.text}" (${this.selectedEntity.entityType})?`)) {
+                this.entities = this.entities.filter(e => e.id !== this.selectedEntity.id);
+                this.selectedEntity = null;
+                this.renderEntities();
+                this.updateStatistics();
+            }
+        } else {
+            alert('Please select an entity to delete.');
+        }
+    }
+
+    highlightOverlaps() {
+        const overlapGroups = this.identifyOverlapGroups(this.entities);
+
+        // Temporarily highlight all overlapping entities
+        document.querySelectorAll('.entity-highlight').forEach(el => {
+            el.style.backgroundColor = '';
+        });
+
+        overlapGroups.forEach(group => {
+            if (group.length > 1) {
+                group.forEach(entity => {
+                    const elements = document.querySelectorAll(`[data-entity-id="${entity.id}"]`);
+                    elements.forEach(el => {
+                        el.style.backgroundColor = 'rgba(255, 0, 0, 0.5)';
+                    });
+                });
+            }
+        });
+
+        // Reset after 3 seconds
+        setTimeout(() => {
+            this.renderEntities();
+        }, 3000);
+    }
+
+    updateStatistics() {
+        const totalEntities = this.entities.length;
+        const overlapGroups = this.identifyOverlapGroups(this.entities);
+        const overlappingEntities = overlapGroups.reduce((count, group) => {
+            return count + (group.length > 1 ? group.length : 0);
+        }, 0);
+        const overlapGroupsCount = overlapGroups.filter(group => group.length > 1).length;
+
+        // Calculate max overlap depth
+        let maxDepth = 0;
+        for (let i = 0; i < this.entities.length; i++) {
+            const depth = this.getEntityOverlapCount(this.entities[i], this.entities);
+            maxDepth = Math.max(maxDepth, depth);
+        }
+
+        document.getElementById('totalEntities').textContent = totalEntities;
+        document.getElementById('overlappingEntities').textContent = overlappingEntities;
+        document.getElementById('overlapGroups').textContent = overlapGroupsCount;
+        document.getElementById('maxOverlapDepth').textContent = maxDepth;
+    }
+
+    loadExistingAnnotations() {
+        // Load existing annotations for this document
+        // This would typically fetch from the server
+        console.log('Loading existing annotations for document:', this.documentId);
+    }
+
+    setSaveLoading(loading) {
+        const btn = document.getElementById('saveAnnotation');
+        const feedback = document.getElementById('saveFeedback');
+        if (loading) {
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Saving...';
+            if (feedback) feedback.style.display = 'none';
+        } else {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-save"></i> Save Annotation';
+        }
+    }
+
+    showSaveFeedback(type, message, detail) {
+        const feedback = document.getElementById('saveFeedback');
+        if (!feedback) return;
+        const colors = { success: 'success', info: 'info', warning: 'warning', error: 'danger' };
+        const icons = { success: 'check-circle', info: 'info-circle', warning: 'exclamation-triangle', error: 'times-circle' };
+        feedback.innerHTML = '<div class="alert alert-' + colors[type] + ' py-2 px-3 mb-0 small">' +
+            '<i class="fas fa-' + icons[type] + ' me-1"></i> <strong>' + message + '</strong>' +
+            (detail ? '<br>' + detail : '') +
+            '</div>';
+        feedback.style.display = 'block';
+    }
+
+    saveAnnotation() {
+        if (this.entities.length === 0) {
+            this.showSaveFeedback('warning', 'Nothing to save', 'Please annotate some entities first.');
+            return;
+        }
+
+        const csrfEl = document.querySelector('[name=csrfmiddlewaretoken]');
+        if (!csrfEl) {
+            this.showSaveFeedback('error', 'CSRF token not found', 'Please refresh the page and try again.');
+            return;
+        }
+
+        this.setSaveLoading(true);
+
+        const annotationData = {
+            entities: this.entities,
+            statistics: {
+                total_entities: this.entities.length,
+                overlap_groups: this.identifyOverlapGroups(this.entities).filter(g => g.length > 1).length,
+                max_overlap_depth: Math.max(...this.entities.map(e => this.getEntityOverlapCount(e, this.entities)))
+            }
+        };
+
+        const self = this;
+        fetch(`/annotation/documents/${this.documentId}/save-overlapping/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrfEl.value
+            },
+            body: JSON.stringify(annotationData)
+        })
+        .then(response => {
+            if (!response.ok) throw new Error('Server returned ' + response.status);
+            return response.json();
+        })
+        .then(data => {
+            self.setSaveLoading(false);
+            if (data.success) {
+                self.showSaveFeedback('success', 'Annotation saved!', 'Redirecting...');
+                document.getElementById('saveAnnotation').disabled = true;
+                setTimeout(function() {
+                    window.location.href = '{% url "annotation:annotator_documents" %}';
+                }, 1500);
+            } else {
+                self.showSaveFeedback('error', 'Save failed', data.error || 'Unknown error');
+            }
+        })
+        .catch(error => {
+            self.setSaveLoading(false);
+            console.error('Save error:', error);
+            self.showSaveFeedback('error', 'Save failed', error.message);
+        });
+    }
+}
+
+// Initialize the annotator when page loads
+document.addEventListener('DOMContentLoaded', function() {
+    window.annotator = new OverlappingEntityAnnotator();
+});
+</script>
+{% endblock %}

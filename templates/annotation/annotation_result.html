@@ -1,0 +1,448 @@
+{% extends 'base.html' %}
+{% load annotation_extras %}
+
+{% block title %}Annotation Result - AnnoHID{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h2>🎯 Annotation Result Details</h2>
+            <div>
+                <a href="{% url 'annotation:document_detail' annotation.document.id %}" class="btn btn-outline-secondary">
+                    ← Back to Document
+                </a>
+                <a href="{% url 'annotation:annotation_results_list' %}" class="btn btn-outline-primary">
+                    📊 All Annotations
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <!-- Annotation Details -->
+    <div class="col-lg-8">
+        <!-- Annotation Info -->
+        <div class="card">
+            <div class="card-header">
+                <div class="d-flex justify-content-between align-items-center">
+                    <h5 class="card-title mb-0">📋 Annotation Information</h5>
+                    <span class="badge bg-{% if annotation.review_status == 'approved' %}success{% elif annotation.review_status == 'rejected' %}danger{% else %}warning{% endif %} fs-6">
+                        {{ annotation.get_review_status_display }}
+                    </span>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <h6 class="text-muted">Model Used</h6>
+                            <span class="badge bg-info">{{ annotation.model_used }}</span>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <h6 class="text-muted">Annotation Type</h6>
+                            <span class="badge bg-secondary">{{ annotation.get_annotation_type_display }}</span>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <h6 class="text-muted">Annotator</h6>
+                            <p class="mb-0">{{ annotation.annotator.username }}</p>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <h6 class="text-muted">Created</h6>
+                            <p class="mb-0">{{ annotation.created_at|date:"M d, Y H:i" }}</p>
+                        </div>
+                    </div>
+                    {% if annotation.processing_time %}
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <h6 class="text-muted">Processing Time</h6>
+                            <p class="mb-0">{{ annotation.processing_time|floatformat:2 }} seconds</p>
+                        </div>
+                    </div>
+                    {% endif %}
+                    {% if annotation.confidence_score %}
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <h6 class="text-muted">Average Confidence</h6>
+                            <p class="mb-0">{{ annotation.confidence_score|floatformat:2 }}</p>
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Document Content with Entities -->
+        <div class="card mt-4">
+            <div class="card-header">
+                <h5 class="card-title mb-0">📄 Annotated Document</h5>
+            </div>
+            <div class="card-body">
+                <div class="border rounded p-3 bg-light mb-3" id="annotated-text">
+                    <!-- Highlighted text will be inserted here by JavaScript -->
+                </div>
+                <div class="text-muted">
+                    <small>Entities are highlighted by type. Hover for details.</small>
+                </div>
+            </div>
+        </div>
+
+        <!-- Entities by Type -->
+        <div class="card mt-4">
+            <div class="card-header">
+                <h5 class="card-title mb-0">🏷️ Entities by Type</h5>
+            </div>
+            <div class="card-body">
+                {% for entity_type in entity_types %}
+                    {% if entity_type in entities_by_type %}
+                        <div class="mb-4">
+                            <h6 class="text-muted">
+                                <span class="badge {% if entity_type == 'SYMPTOM' %}bg-primary{% elif entity_type == 'DISEASE' %}bg-success{% elif entity_type == 'BODY_PART' %}bg-info{% elif entity_type == 'MEDICATION' %}bg-warning{% else %}bg-secondary{% endif %}">
+                                    {{ entity_type }}
+                                </span>
+                                ({{ entities_by_type|lookup:entity_type|length }} entities)
+                            </h6>
+                            <div class="row">
+                                {% for entity in entities_by_type|lookup:entity_type %}
+                                <div class="col-md-6 mb-3">
+                                    <div class="border rounded p-2">
+                                        <strong>"{{ entity.text }}"</strong>
+                                        {% if entity.confidence %}
+                                        <small class="text-muted">({{ entity.confidence|floatformat:2 }} confidence)</small>
+                                        {% endif %}
+                                        {% if entity.attributes %}
+                                        <div class="mt-1">
+                                            {% for key, value in entity.attributes.items %}
+                                            <small class="text-muted d-block">{{ key }}: {{ value }}</small>
+                                            {% endfor %}
+                                        </div>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    {% endif %}
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Side Panel -->
+    <div class="col-lg-4">
+        <!-- Statistics -->
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">📊 Statistics</h5>
+            </div>
+            <div class="card-body">
+                <div class="row text-center">
+                    <div class="col-6">
+                        <h6 class="text-primary">{{ annotation.total_entities }}</h6>
+                        <small class="text-muted">Total Entities</small>
+                    </div>
+                    <div class="col-6">
+                        <h6 class="text-info">{{ entity_stats|length }}</h6>
+                        <small class="text-muted">Entity Types</small>
+                    </div>
+                </div>
+                <hr>
+                <div class="text-center">
+                    {% if annotation.confidence_score %}
+                    <h6 class="text-success">{{ annotation.confidence_score|floatformat:1 }}%</h6>
+                    <small class="text-muted">Average Confidence</small>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Entity Type Breakdown -->
+        <div class="card mt-4">
+            <div class="card-header">
+                <h5 class="card-title mb-0">🏷️ Entity Breakdown</h5>
+            </div>
+            <div class="card-body">
+                {% for entity_type, count in entity_stats.items %}
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <span class="badge {% if entity_type == 'SYMPTOM' %}bg-primary{% elif entity_type == 'DISEASE' %}bg-success{% elif entity_type == 'BODY_PART' %}bg-info{% elif entity_type == 'MEDICATION' %}bg-warning{% else %}bg-secondary{% endif %}">
+                        {{ entity_type }}
+                    </span>
+                    <strong>{{ count }}</strong>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- Review Status -->
+        <div class="card mt-4">
+            <div class="card-header">
+                <h5 class="card-title mb-0">✅ Review Status</h5>
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <h6 class="text-muted">Current Status</h6>
+                    <span class="badge bg-{% if annotation.review_status == 'approved' %}success{% elif annotation.review_status == 'rejected' %}danger{% else %}warning{% endif %} fs-6">
+                        {{ annotation.get_review_status_display }}
+                    </span>
+                </div>
+
+                {% if annotation.admin_notes %}
+                <div class="mb-3">
+                    <h6 class="text-muted">Admin Notes</h6>
+                    <div class="border rounded p-2 bg-light">
+                        <small>{{ annotation.admin_notes }}</small>
+                    </div>
+                </div>
+                {% endif %}
+
+                <div class="d-grid gap-2">
+                    <button class="btn btn-success btn-sm" onclick="updateStatus('approved')">
+                        ✅ Approve
+                    </button>
+                    <button class="btn btn-danger btn-sm" onclick="updateStatus('rejected')">
+                        ❌ Reject
+                    </button>
+                    <button class="btn btn-warning btn-sm" onclick="updateStatus('pending')">
+                        ⏳ Reset to Pending
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Actions -->
+        <div class="card mt-4">
+            <div class="card-header">
+                <h5 class="card-title mb-0">⚡ Actions</h5>
+            </div>
+            <div class="card-body">
+                <div class="d-grid gap-2">
+                    <a href="{% url 'annotation:annotate_document' annotation.document.id %}" class="btn btn-outline-primary btn-sm">
+                        🤖 Re-annotate Document
+                    </a>
+                    <a href="{% url 'annotation:document_detail' annotation.document.id %}" class="btn btn-outline-secondary btn-sm">
+                        📄 View Document Details
+                    </a>
+                    <button class="btn btn-outline-info btn-sm" onclick="exportAnnotation()">
+                        💾 Export Results
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal for adding notes -->
+<div class="modal fade" id="notesModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Add Review Notes</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <textarea class="form-control" rows="4" placeholder="Enter your review notes..." id="review-notes"></textarea>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="submitStatusUpdate()">Save</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Initialize annotated text visualization
+    highlightEntitiesInText();
+});
+
+let pendingStatusUpdate = null;
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+function highlightEntitiesInText() {
+    const documentText = `{{ annotation.document.content|escapejs }}`;
+    const entities = {{ annotation_entities_json|safe }} || [];
+    const annotatedTextElement = document.getElementById('annotated-text');
+
+    if (!entities.length) {
+        annotatedTextElement.innerHTML = `<div style="white-space: pre-wrap; line-height: 2;">${escapeHtml(documentText)}</div>`;
+        return;
+    }
+
+    // Normalize and filter entities
+    const normalized = entities.map(e => ({
+        start: e.start_offset || e.start || 0,
+        end: e.end_offset || e.end || 0,
+        label: e.label || e.entity_type || 'UNKNOWN',
+        text: e.text || '',
+        confidence: e.confidence || 0
+    })).filter(e => e.end > e.start);
+
+    // Sort by start ascending, prefer longer spans
+    normalized.sort((a, b) => a.start - b.start || (b.end - b.start) - (a.end - a.start));
+
+    // Remove overlaps
+    const resolved = [];
+    let lastEnd = 0;
+    for (const entity of normalized) {
+        if (entity.start >= lastEnd) {
+            resolved.push(entity);
+            lastEnd = entity.end;
+        }
+    }
+
+    // Build highlighted HTML left-to-right
+    let result = '';
+    let lastIndex = 0;
+
+    resolved.forEach(entity => {
+        const start = Math.max(0, Math.min(entity.start, documentText.length));
+        const end = Math.max(start, Math.min(entity.end, documentText.length));
+
+        // Escape text before this entity
+        if (start > lastIndex) {
+            result += escapeHtml(documentText.substring(lastIndex, start));
+        }
+
+        // Build highlighted badge
+        const badgeClass = getBadgeClass(entity.label);
+        let title = `${entity.label}: ${entity.text}`;
+        if (entity.confidence) {
+            title += ` (${(entity.confidence * 100).toFixed(1)}% confidence)`;
+        }
+        const escapedText = escapeHtml(documentText.substring(start, end));
+        const escapedTitle = escapeHtml(title);
+        result += `<span class="badge ${badgeClass}" title="${escapedTitle}" style="cursor: help;">${escapedText}</span>`;
+
+        lastIndex = end;
+    });
+
+    // Escape remaining text
+    if (lastIndex < documentText.length) {
+        result += escapeHtml(documentText.substring(lastIndex));
+    }
+
+    annotatedTextElement.innerHTML = `<div style="white-space: pre-wrap; line-height: 2;">${result}</div>`;
+}
+
+function getBadgeClass(entityType) {
+    const typeClasses = {
+        'SYMPTOM': 'bg-primary',
+        'DISEASE': 'bg-success',
+        'BODY_PART': 'bg-info',
+        'MEDICATION': 'bg-warning text-dark',
+        'PROCEDURE': 'bg-secondary'
+    };
+    return typeClasses[entityType] || 'bg-dark';
+}
+
+function updateStatus(status) {
+    pendingStatusUpdate = status;
+
+    // Show modal for notes
+    const modal = new bootstrap.Modal(document.getElementById('notesModal'));
+    document.getElementById('review-notes').value = '';
+    modal.show();
+}
+
+function submitStatusUpdate() {
+    if (!pendingStatusUpdate) return;
+
+    const notes = document.getElementById('review-notes').value;
+
+    fetch('{% url "annotation:update_annotation_status" annotation.id %}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+        },
+        body: JSON.stringify({
+            status: pendingStatusUpdate,
+            notes: notes
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showAlert('success', data.message);
+            // Reload page to show updated status
+            setTimeout(() => window.location.reload(), 1000);
+        } else {
+            showAlert('danger', 'Error: ' + data.error);
+        }
+    })
+    .catch(error => {
+        console.error('Status update error:', error);
+        showAlert('danger', 'Failed to update status. Please try again.');
+    });
+
+    // Hide modal
+    bootstrap.Modal.getInstance(document.getElementById('notesModal')).hide();
+    pendingStatusUpdate = null;
+}
+
+function exportAnnotation() {
+    const data = {
+        document: {
+            id: {{ annotation.document.id }},
+            content: `{{ annotation.document.content|escapejs }}`,
+            word_count: {{ annotation.document.word_count }}
+        },
+        annotation: {
+            id: {{ annotation.id }},
+            model_used: '{{ annotation.model_used }}',
+            created_at: '{{ annotation.created_at|date:"c" }}',
+            total_entities: {{ annotation.total_entities }},
+            confidence_score: {{ annotation.confidence_score|default:0 }},
+            entities: {{ annotation_entities_json|safe }}
+        }
+    };
+
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `annotation_${annotation.id}_${annotation.model_used}.json`.replace(/[^a-zA-Z0-9._-]/g, '_');
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    showAlert('success', 'Annotation data exported successfully!');
+}
+
+function showAlert(type, message) {
+    const alertDiv = document.createElement('div');
+    alertDiv.className = `alert alert-${type} alert-dismissible fade show`;
+    alertDiv.innerHTML = `
+        ${message}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    `;
+
+    // Insert at the top of the content
+    const content = document.querySelector('main');
+    content.insertBefore(alertDiv, content.firstChild);
+
+    // Auto-dismiss after 5 seconds
+    setTimeout(() => {
+        if (alertDiv.parentNode) {
+            alertDiv.remove();
+        }
+    }, 5000);
+}
+</script>
+{% endblock %}

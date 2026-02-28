@@ -1,0 +1,186 @@
+{% extends 'base.html' %}
+
+{% block title %}Upload Guideline - AnnoHID{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h2 class="mb-0">📋 Upload New Guideline</h2>
+            <a href="{% url 'annotation:admin_guidelines' %}" class="btn btn-secondary">
+                ← Back to Guidelines
+            </a>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-lg-8 mx-auto">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">📝 Guideline Details</h5>
+            </div>
+            <div class="card-body">
+                <form method="post">
+                    {% csrf_token %}
+
+                    <div class="mb-3">
+                        <label for="title" class="form-label">
+                            <strong>Title <span class="text-danger">*</span></strong>
+                        </label>
+                        <input type="text" class="form-control" id="title" name="title"
+                               placeholder="Enter guideline title" required maxlength="255">
+                        <div class="form-text">A clear, descriptive title for the guideline</div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="description" class="form-label">
+                            <strong>Description</strong>
+                        </label>
+                        <textarea class="form-control" id="description" name="description" rows="3"
+                                  placeholder="Enter a brief description of the guideline (optional)"></textarea>
+                        <div class="form-text">Optional brief description of what this guideline covers</div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="content" class="form-label">
+                            <strong>Content <span class="text-danger">*</span></strong>
+                        </label>
+                        <textarea class="form-control" id="content" name="content" rows="15"
+                                  placeholder="Enter the guideline content here..." required></textarea>
+                        <div class="form-text">
+                            The main content of the guideline. You can use plain text or basic formatting.
+                            <br>
+                            <strong>Tips:</strong> Include entity definitions, annotation rules, examples, and best practices.
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="is_active" name="is_active" checked>
+                            <label class="form-check-label" for="is_active">
+                                <strong>Active</strong>
+                            </label>
+                            <div class="form-text">
+                                When active, this guideline will be visible to annotators.
+                                Uncheck to save as draft.
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6">
+                            <button type="submit" class="btn btn-primary btn-lg w-100">
+                                💾 Upload Guideline
+                            </button>
+                        </div>
+                        <div class="col-md-6">
+                            <a href="{% url 'annotation:admin_guidelines' %}" class="btn btn-secondary btn-lg w-100">
+                                ❌ Cancel
+                            </a>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Help Section -->
+        <div class="card mt-4">
+            <div class="card-header bg-info text-white">
+                <h6 class="card-title mb-0">💡 Guidelines Writing Tips</h6>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6>📝 Content Structure</h6>
+                        <ul class="small">
+                            <li>Start with an overview</li>
+                            <li>Define each entity type clearly</li>
+                            <li>Provide specific examples</li>
+                            <li>Include edge cases and exceptions</li>
+                        </ul>
+                    </div>
+                    <div class="col-md-6">
+                        <h6>🎯 Best Practices</h6>
+                        <ul class="small">
+                            <li>Use clear, simple language</li>
+                            <li>Include visual examples if possible</li>
+                            <li>Address common mistakes</li>
+                            <li>Keep guidelines up to date</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="mt-3">
+                    <h6>📋 Sample Guideline Structure</h6>
+                    <div class="bg-light p-3 rounded">
+                        <code class="small">
+                            # Medical Entity Annotation Guidelines<br><br>
+                            ## Overview<br>
+                            Brief explanation of the annotation task...<br><br>
+                            ## Entity Types<br>
+                            ### SYMPTOM<br>
+                            Definition: Signs or symptoms experienced by patients...<br>
+                            Examples: fever, headache, nausea<br><br>
+                            ### DISEASE<br>
+                            Definition: Medical conditions or diagnoses...<br>
+                            Examples: diabetes, hypertension, pneumonia<br><br>
+                            ## Annotation Rules<br>
+                            1. Always select the full entity span<br>
+                            2. Prioritize specific over general terms<br>
+                            3. When in doubt, include rather than exclude<br><br>
+                            ## Common Mistakes<br>
+                            - Annotating body parts as symptoms<br>
+                            - Missing compound medical terms
+                        </code>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Auto-resize textarea
+    const contentTextarea = document.getElementById('content');
+    contentTextarea.addEventListener('input', function() {
+        this.style.height = 'auto';
+        this.style.height = (this.scrollHeight) + 'px';
+    });
+
+    // Character counter for title
+    const titleInput = document.getElementById('title');
+    const titleCounter = document.createElement('small');
+    titleCounter.className = 'text-muted';
+    titleInput.parentNode.appendChild(titleCounter);
+
+    titleInput.addEventListener('input', function() {
+        const remaining = 255 - this.value.length;
+        titleCounter.textContent = `${this.value.length}/255 characters`;
+        titleCounter.className = remaining < 50 ? 'text-warning' : 'text-muted';
+    });
+
+    // Form validation
+    const form = document.querySelector('form');
+    form.addEventListener('submit', function(e) {
+        const title = titleInput.value.trim();
+        const content = contentTextarea.value.trim();
+
+        if (!title || !content) {
+            e.preventDefault();
+            alert('Please fill in all required fields (Title and Content).');
+            return false;
+        }
+
+        if (title.length > 255) {
+            e.preventDefault();
+            alert('Title must be 255 characters or less.');
+            return false;
+        }
+    });
+});
+</script>
+{% endblock %}

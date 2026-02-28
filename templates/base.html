@@ -1,0 +1,569 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token }}">
+    <title>{% block title %}AnnoHID{% endblock %}</title>
+
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <!-- IntroJS CSS -->
+    <link href="https://unpkg.com/intro.js/minified/introjs.min.css" rel="stylesheet">
+
+    <!-- Custom CSS -->
+    <style>
+        body {
+            background-color: #f8f9fa;
+        }
+        .navbar-brand {
+            font-weight: bold;
+        }
+        .card {
+            box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+            border: 1px solid rgba(0, 0, 0, 0.125);
+        }
+        .btn-primary {
+            background-color: #0066cc;
+            border-color: #0066cc;
+        }
+        .btn-primary:hover {
+            background-color: #0052a3;
+            border-color: #0052a3;
+        }
+        .activity-indicator {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            background-color: #28a745;
+            border-radius: 50%;
+            margin-right: 5px;
+        }
+        .session-info {
+            font-size: 0.8rem;
+            color: #6c757d;
+        }
+
+        /* IntroJS Custom Styling */
+        .introjs-tooltip {
+            max-width: 400px;
+        }
+
+        .introjs-button {
+            background-color: #0066cc;
+            border-color: #0066cc;
+            color: white;
+            text-shadow: none;
+        }
+
+        .introjs-button:hover {
+            background-color: #0052a3;
+            border-color: #0052a3;
+        }
+
+        .introjs-skipbutton {
+            color: #6c757d;
+        }
+
+        .introjs-prevbutton {
+            background-color: #6c757d;
+            border-color: #6c757d;
+        }
+
+        /* Floating Help Button */
+        .floating-help-btn {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            width: 60px;
+            height: 60px;
+            background-color: #0066cc;
+            color: white;
+            border: none;
+            border-radius: 50%;
+            font-size: 24px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            cursor: pointer;
+            z-index: 1050;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .floating-help-btn:hover {
+            background-color: #0052a3;
+            transform: scale(1.1);
+            box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
+        }
+
+        .floating-help-menu {
+            position: fixed;
+            bottom: 90px;
+            right: 20px;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            padding: 10px;
+            z-index: 1049;
+            display: none;
+            min-width: 200px;
+        }
+
+        .floating-help-menu .btn {
+            display: block;
+            width: 100%;
+            text-align: left;
+            margin-bottom: 5px;
+            font-size: 14px;
+        }
+    </style>
+
+    {% block extra_css %}{% endblock %}
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+        <div class="container">
+            <a class="navbar-brand" href="{% url 'root' %}">
+                🏥 AnnoHID
+            </a>
+
+            {% if user.is_authenticated %}
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto">
+                    <!-- Dashboard Link (Always Visible) -->
+                    <li class="nav-item">
+                        <a class="nav-link" href="{% url 'authentication:dashboard' %}">
+                            <i class="fas fa-home"></i> Dashboard
+                        </a>
+                    </li>
+
+                    {% if user.role == 'annotator' %}
+                    <!-- Annotator: My Documents -->
+                    <li class="nav-item">
+                        <a class="nav-link" href="{% url 'annotation:annotator_documents' %}">
+                            <i class="fas fa-file-alt"></i> My Documents
+                        </a>
+                    </li>
+                    {% endif %}
+
+                    {% if user.is_admin %}
+                    <!-- Admin Menu -->
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" id="adminDropdown" role="button" data-bs-toggle="dropdown">
+                            <i class="fas fa-cog"></i> Admin Tools
+                        </a>
+                        <ul class="dropdown-menu dropdown-menu-end" style="min-width: 280px;">
+                            <!-- Quick Stats -->
+                            <li class="dropdown-header">📈 Statistics & Analytics</li>
+                            <li><a class="dropdown-item" href="{% url 'annotation:admin_statistics_dashboard' %}">
+                                <i class="fas fa-chart-bar text-primary"></i> Statistics Dashboard
+                            </a></li>
+                            <li><a class="dropdown-item" href="{% url 'annotation:time_analytics' %}">
+                                <i class="fas fa-clock text-info"></i> Time Analytics
+                            </a></li>
+
+                            <li><hr class="dropdown-divider"></li>
+
+                            <!-- Data Management -->
+                            <li class="dropdown-header">🗃️ Data Management</li>
+                            <li><a class="dropdown-item" href="{% url 'annotation:admin_data_management' %}">
+                                <i class="fas fa-database text-success"></i> Data Overview
+                            </a></li>
+                            <li><a class="dropdown-item" href="{% url 'annotation:document_list' %}">
+                                <i class="fas fa-file-medical text-warning"></i> All Documents
+                            </a></li>
+                            <li><a class="dropdown-item" href="{% url 'annotation:import_history' %}">
+                                <i class="fas fa-file-import text-info"></i> Import History
+                            </a></li>
+
+                            <li><hr class="dropdown-divider"></li>
+
+                            <!-- Guidelines -->
+                            <li class="dropdown-header">📚 Guidelines</li>
+                            <li><a class="dropdown-item" href="{% url 'annotation:admin_guidelines' %}">
+                                <i class="fas fa-book text-primary"></i> Manage Guidelines
+                            </a></li>
+
+                            <li><hr class="dropdown-divider"></li>
+
+                            <!-- User Management -->
+                            <li class="dropdown-header">👥 User Management</li>
+                            <li><a class="dropdown-item" href="{% url 'authentication:dashboard' %}#user-management">
+                                <i class="fas fa-users text-primary"></i> All Users
+                            </a></li>
+                            <li><a class="dropdown-item" href="{% url 'authentication:dashboard' %}#active-sessions">
+                                <i class="fas fa-user-check text-success"></i> Active Sessions
+                            </a></li>
+
+                            <li><hr class="dropdown-divider"></li>
+
+                            <!-- Gamification -->
+                            <li class="dropdown-header">🏆 Gamification</li>
+                            <li><a class="dropdown-item" href="{% url 'authentication:gamification_config' %}">
+                                <i class="fas fa-trophy text-warning"></i> Gamification Settings
+                            </a></li>
+
+                            <li><hr class="dropdown-divider"></li>
+
+                            <!-- System -->
+                            <li class="dropdown-header">⚡ System</li>
+                            <li><a class="dropdown-item" href="{% url 'annotation:api_key_management' %}">
+                                <i class="fas fa-key text-warning"></i> API Key Management
+                            </a></li>
+                            <li><a class="dropdown-item" href="{% url 'admin:index' %}">
+                                <i class="fas fa-tools text-danger"></i> Django Admin
+                            </a></li>
+                        </ul>
+                    </li>
+                    {% endif %}
+
+                    <!-- User Menu -->
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" id="userDropdown" role="button" data-bs-toggle="dropdown">
+                            <span class="activity-indicator"></span>
+                            <i class="fas fa-user-circle"></i> {{ user.username }}
+                        </a>
+                        <ul class="dropdown-menu dropdown-menu-end">
+                            <li><a class="dropdown-item" href="{% url 'authentication:profile' %}">
+                                <i class="fas fa-user"></i> My Profile
+                            </a></li>
+                            <li><a class="dropdown-item" href="{% url 'authentication:points_history' %}">
+                                <i class="fas fa-history"></i> Points History
+                            </a></li>
+                            <li><a class="dropdown-item" href="{% url 'annotation:view_guidelines' %}">
+                                <i class="fas fa-book-open"></i> View Guidelines
+                            </a></li>
+                            <li><a class="dropdown-item" href="#" onclick="startIntroTour()" id="help-tour-btn">
+                                <i class="fas fa-question-circle"></i> Take Tour
+                            </a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" href="{% url 'authentication:logout' %}">
+                                <i class="fas fa-sign-out-alt"></i> Logout
+                            </a></li>
+                        </ul>
+                    </li>
+                </ul>
+            </div>
+            {% endif %}
+        </div>
+    </nav>
+
+    <!-- Messages -->
+    {% if messages %}
+    <div class="container mt-3">
+        {% for message in messages %}
+        <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+            {{ message }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <!-- Main Content -->
+    <main class="container mt-4">
+        {% block content %}{% endblock %}
+    </main>
+
+    <!-- Floating Help Button -->
+    {% if user.is_authenticated %}
+    <button class="floating-help-btn" onclick="toggleHelpMenu()" title="Help & Tours">
+        💡
+    </button>
+
+    <div class="floating-help-menu" id="helpMenu">
+        <button class="btn btn-primary btn-sm" onclick="startIntroTour(); hideHelpMenu();">
+            🎯 Start Tour
+        </button>
+        <button class="btn btn-outline-secondary btn-sm" onclick="resetTourPreferences(); hideHelpMenu();">
+            🔄 Reset All Tours
+        </button>
+        {% if user.is_admin %}
+        <button class="btn btn-outline-info btn-sm" onclick="window.open('{% url "admin:index" %}', '_blank'); hideHelpMenu();">
+            🔧 Django Admin
+        </button>
+        {% endif %}
+        <hr class="my-2">
+        <small class="text-muted">Click anywhere to close</small>
+    </div>
+    {% endif %}
+
+    <!-- Footer -->
+    <footer class="bg-light mt-5 py-4">
+        <div class="container">
+            <div class="row">
+                <div class="col-md-6">
+                    <p class="mb-0">&copy; 2024 AnnoHID</p>
+                </div>
+                <div class="col-md-6 text-end">
+                    {% if user.is_authenticated %}
+                    <span class="session-info">
+                        Session: {{ request.session.session_key|slice:":8" }}...
+                        | Last activity: <span id="last-activity">{{ user.last_activity|timesince }} ago</span>
+                    </span>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+
+    <!-- IntroJS -->
+    <script src="https://unpkg.com/intro.js/minified/intro.min.js"></script>
+
+    <!-- Tour Management -->
+    <script>
+        function startIntroTour() {
+            // Check if we're on a specific dashboard page
+            {% if user.is_admin %}
+                if (typeof startAdminTour === 'function' && document.querySelector('h2') && document.querySelector('h2').textContent.includes('Admin Dashboard')) {
+                    startAdminTour();
+                    return;
+                }
+            {% endif %}
+
+            {% if user.role == 'annotator' %}
+                if (typeof startAnnotatorTour === 'function' && document.querySelector('h2') && document.querySelector('h2').textContent.includes('Annotator Dashboard')) {
+                    startAnnotatorTour();
+                    return;
+                }
+            {% endif %}
+
+            // Default generic tour for navigation and basic features
+            startGenericTour();
+        }
+
+        function startGenericTour() {
+            introJs().setOptions({
+                steps: [{
+                    intro: "👋 Welcome to the AnnoHID! Let me show you around the basic navigation features."
+                }, {
+                    element: '.navbar-brand',
+                    intro: "🏥 This is your home - click here anytime to return to your dashboard.",
+                    position: 'bottom'
+                }, {
+                    element: '#userDropdown',
+                    intro: "👤 This is your user menu where you can access your profile, dashboard, and this tour.",
+                    position: 'bottom'
+                }{% if user.is_admin %}, {
+                    element: '#adminDropdown',
+                    intro: "⚙️ As an admin, you have access to additional management tools through this dropdown.",
+                    position: 'bottom'
+                }{% endif %}, {
+                    intro: "🎯 Navigate to your dashboard to see role-specific tours with detailed guidance for your tasks!"
+                }]
+            }).start();
+        }
+
+        // Store tour completion preferences
+        function markTourCompleted(tourType) {
+            localStorage.setItem('tour_completed_' + tourType, 'true');
+        }
+
+        function hasTourBeenCompleted(tourType) {
+            return localStorage.getItem('tour_completed_' + tourType) === 'true';
+        }
+
+        function resetTourPreferences() {
+            localStorage.removeItem('tour_completed_admin');
+            localStorage.removeItem('tour_completed_annotator');
+            localStorage.removeItem('tour_completed_generic');
+            alert('✅ Tour preferences have been reset! You\'ll see welcome prompts again on your next dashboard visit.');
+        }
+
+        // Floating Help Menu Functions
+        function toggleHelpMenu() {
+            const menu = document.getElementById('helpMenu');
+            if (menu.style.display === 'none' || menu.style.display === '') {
+                menu.style.display = 'block';
+                // Close menu when clicking outside
+                setTimeout(() => {
+                    document.addEventListener('click', closeHelpMenuOnOutsideClick);
+                }, 100);
+            } else {
+                hideHelpMenu();
+            }
+        }
+
+        function hideHelpMenu() {
+            const menu = document.getElementById('helpMenu');
+            menu.style.display = 'none';
+            document.removeEventListener('click', closeHelpMenuOnOutsideClick);
+        }
+
+        function closeHelpMenuOnOutsideClick(event) {
+            const menu = document.getElementById('helpMenu');
+            const button = document.querySelector('.floating-help-btn');
+
+            if (!menu.contains(event.target) && !button.contains(event.target)) {
+                hideHelpMenu();
+            }
+        }
+    </script>
+
+    <!-- Activity tracking for authenticated users -->
+    {% if user.is_authenticated %}
+    <script>
+        // Get CSRF token from meta tag or cookie
+        function getCSRFToken() {
+            // Try to get from meta tag first
+            const metaTag = document.querySelector('meta[name="csrf-token"]');
+            if (metaTag) {
+                return metaTag.getAttribute('content');
+            }
+
+            // Try to get from form
+            const csrfInput = document.querySelector('[name=csrfmiddlewaretoken]');
+            if (csrfInput) {
+                return csrfInput.value;
+            }
+
+            // Try to get from cookie
+            const name = 'csrftoken';
+            let cookieValue = null;
+            if (document.cookie && document.cookie !== '') {
+                const cookies = document.cookie.split(';');
+                for (let i = 0; i < cookies.length; i++) {
+                    const cookie = cookies[i].trim();
+                    if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                        break;
+                    }
+                }
+            }
+            return cookieValue;
+        }
+
+        // Update activity every 30 seconds
+        setInterval(function() {
+            const csrfToken = getCSRFToken();
+            if (!csrfToken) {
+                console.log('CSRF token not found, skipping activity update');
+                return;
+            }
+
+            fetch('{% url "authentication:update_activity" %}', {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': csrfToken,
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({})
+            }).then(response => {
+                if (response.ok) {
+                    // Update last activity timestamp
+                    const activityElement = document.getElementById('last-activity');
+                    if (activityElement) {
+                        activityElement.textContent = 'Just now';
+                    }
+                }
+            }).catch(error => {
+                console.log('Activity update failed:', error);
+            });
+        }, 30000); // 30 seconds
+    </script>
+    {% endif %}
+
+    <!-- Gamification Toast Container -->
+    <div id="gamification-toast-container" style="position:fixed;top:20px;right:20px;z-index:9999;max-width:380px;"></div>
+
+    <script>
+    /**
+     * Show gamification toast notification after annotation completion.
+     * Call this with the response data from any annotation save endpoint.
+     */
+    function showGamificationToast(data) {
+        if (!data || !data.gamification) return;
+        const g = data.gamification;
+        if (!g.points_earned || g.points_earned === 0) return;
+
+        const container = document.getElementById('gamification-toast-container');
+        if (!container) return;
+
+        // Build breakdown HTML
+        let breakdownHtml = '';
+        if (g.breakdown && g.breakdown.length > 0) {
+            breakdownHtml = '<div class="mt-2 small">';
+            g.breakdown.forEach(function(item) {
+                breakdownHtml += '<div class="d-flex justify-content-between"><span>' + item[0] + '</span><span class="text-warning fw-bold">+' + item[1] + '</span></div>';
+            });
+            breakdownHtml += '</div>';
+        }
+
+        // Level up banner
+        let levelUpHtml = '';
+        if (g.level_up) {
+            levelUpHtml = '<div class="alert alert-warning py-1 px-2 mt-2 mb-0 text-center"><strong>🎉 LEVEL UP!</strong> You are now <strong>' + g.level_title + '</strong> (Level ' + g.level + ')</div>';
+        }
+
+        // Achievements
+        let achievementsHtml = '';
+        if (g.achievements_earned && g.achievements_earned.length > 0) {
+            achievementsHtml = '<div class="mt-2">';
+            g.achievements_earned.forEach(function(a) {
+                achievementsHtml += '<div class="alert alert-info py-1 px-2 mb-1"><span style="font-size:1.2em">' + a.icon + '</span> <strong>' + a.name + '</strong> <span class="badge bg-warning">+' + a.points_reward + ' pts</span></div>';
+            });
+            achievementsHtml += '</div>';
+        }
+
+        // Streak info
+        let streakHtml = '';
+        if (g.streak > 1) {
+            streakHtml = '<div class="mt-1 small text-muted">🔥 ' + g.streak + ' day streak</div>';
+        }
+
+        const toastId = 'gamification-toast-' + Date.now();
+        const toastHtml = '<div id="' + toastId + '" class="toast show mb-2" role="alert" style="min-width:340px;border-left:4px solid #ffc107;animation:slideInRight 0.3s ease-out">' +
+            '<div class="toast-header bg-dark text-white">' +
+                '<strong class="me-auto">⭐ Points Earned!</strong>' +
+                '<span class="badge bg-warning text-dark fs-6">+' + g.points_earned + ' pts</span>' +
+                '<button type="button" class="btn-close btn-close-white ms-2" onclick="this.closest(\'.toast\').remove()"></button>' +
+            '</div>' +
+            '<div class="toast-body">' +
+                '<div class="d-flex justify-content-between align-items-center">' +
+                    '<span>Total: <strong>' + g.new_total + ' pts</strong></span>' +
+                    '<span class="badge bg-primary">' + g.level_title + '</span>' +
+                '</div>' +
+                breakdownHtml +
+                streakHtml +
+                levelUpHtml +
+                achievementsHtml +
+            '</div>' +
+        '</div>';
+
+        container.insertAdjacentHTML('beforeend', toastHtml);
+
+        // Auto-dismiss after 8 seconds (longer for level-ups/achievements)
+        const dismissTime = (g.level_up || (g.achievements_earned && g.achievements_earned.length > 0)) ? 12000 : 8000;
+        setTimeout(function() {
+            const toast = document.getElementById(toastId);
+            if (toast) {
+                toast.style.transition = 'opacity 0.5s';
+                toast.style.opacity = '0';
+                setTimeout(function() { toast.remove(); }, 500);
+            }
+        }, dismissTime);
+    }
+    </script>
+    <style>
+    @keyframes slideInRight {
+        from { transform: translateX(100%); opacity: 0; }
+        to { transform: translateX(0); opacity: 1; }
+    }
+    </style>
+
+    {% block extra_js %}{% endblock %}
+</body>
+</html>

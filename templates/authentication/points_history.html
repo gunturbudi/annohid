@@ -1,0 +1,202 @@
+{% extends 'base.html' %}
+
+{% block title %}Points History - AnnoHID{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- Header -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h2 class="mb-1">Points History</h2>
+                    <p class="text-muted mb-0">See where your points came from</p>
+                </div>
+                <a href="{% url 'authentication:dashboard' %}" class="btn btn-outline-secondary">
+                    Back to Dashboard
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Summary Cards -->
+    <div class="row mb-4">
+        <div class="col-md-3 mb-3">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body text-center">
+                    <h6 class="text-muted mb-1">Total Points</h6>
+                    <h2 class="mb-0 text-primary">{{ profile.total_points }}</h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3 mb-3">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body text-center">
+                    <h6 class="text-muted mb-1">Level {{ profile.level }}</h6>
+                    <h4 class="mb-0">{{ profile.get_level_title }}</h4>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3 mb-3">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body text-center">
+                    <h6 class="text-muted mb-1">This Week</h6>
+                    <h2 class="mb-0 text-warning">{{ profile.weekly_points }}</h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3 mb-3">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body text-center">
+                    <h6 class="text-muted mb-1">Current Streak</h6>
+                    <h2 class="mb-0 text-danger">{{ profile.current_streak }} <small class="fs-6">days</small></h2>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Level Progress -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <span class="fw-bold">Level {{ profile.level }} - {{ profile.get_level_title }}</span>
+                        {% if profile.get_points_for_next_level %}
+                        <span class="text-muted">{{ profile.total_points }} / {{ profile.get_points_for_next_level }} pts</span>
+                        {% else %}
+                        <span class="text-muted">Max Level</span>
+                        {% endif %}
+                    </div>
+                    <div class="progress" style="height: 10px;">
+                        <div class="progress-bar bg-primary" role="progressbar"
+                             style="width: {{ profile.get_level_progress_percent }}%"
+                             aria-valuenow="{{ profile.get_level_progress_percent }}" aria-valuemin="0" aria-valuemax="100">
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filter Tabs -->
+    {% if filter_tabs %}
+    <div class="row mb-3">
+        <div class="col-12">
+            <div class="d-flex flex-wrap gap-2">
+                <a href="{% url 'authentication:points_history' %}"
+                   class="btn btn-sm {% if not action_filter %}btn-primary{% else %}btn-outline-secondary{% endif %}">
+                    All
+                </a>
+                {% for tab in filter_tabs %}
+                <a href="{% url 'authentication:points_history' %}?action={{ tab.value }}"
+                   class="btn btn-sm {% if action_filter == tab.value %}btn-primary{% else %}btn-outline-secondary{% endif %}">
+                    {{ tab.label }}
+                </a>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Transactions Table -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body p-0">
+                    {% if page_obj.object_list %}
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Action</th>
+                                    <th>Description</th>
+                                    <th class="text-end">Points</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for tx in page_obj %}
+                                <tr>
+                                    <td class="text-muted" style="white-space: nowrap;">
+                                        {{ tx.created_at|date:"M d, Y H:i" }}
+                                    </td>
+                                    <td>
+                                        {% if tx.action_type == 'ner_complete' %}
+                                        <span class="badge bg-info">NER</span>
+                                        {% elif tx.action_type == 'mcn_complete' %}
+                                        <span class="badge bg-success">MCN</span>
+                                        {% elif tx.action_type == 'streak_bonus' %}
+                                        <span class="badge bg-danger">Streak</span>
+                                        {% elif tx.action_type == 'speed_bonus' %}
+                                        <span class="badge bg-warning text-dark">Speed</span>
+                                        {% elif tx.action_type == 'quality_bonus' %}
+                                        <span class="badge bg-primary">Quality</span>
+                                        {% elif tx.action_type == 'first_of_day' %}
+                                        <span class="badge bg-secondary">First of Day</span>
+                                        {% elif tx.action_type == 'achievement' %}
+                                        <span class="badge" style="background-color: #ffd700; color: #333;">Achievement</span>
+                                        {% elif tx.action_type == 'level_up' %}
+                                        <span class="badge" style="background-color: #9b59b6; color: #fff;">Level Up</span>
+                                        {% else %}
+                                        <span class="badge bg-dark">{{ tx.get_action_type_display }}</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>{{ tx.description|default:"—" }}</td>
+                                    <td class="text-end fw-bold {% if tx.points > 0 %}text-success{% elif tx.points < 0 %}text-danger{% endif %}">
+                                        {% if tx.points > 0 %}+{% endif %}{{ tx.points }}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- Pagination -->
+                    {% if page_obj.has_other_pages %}
+                    <div class="card-footer bg-white">
+                        <nav>
+                            <ul class="pagination pagination-sm justify-content-center mb-0">
+                                {% if page_obj.has_previous %}
+                                <li class="page-item">
+                                    <a class="page-link" href="?{% if action_filter %}action={{ action_filter }}&{% endif %}page={{ page_obj.previous_page_number }}">Previous</a>
+                                </li>
+                                {% endif %}
+
+                                {% for num in page_obj.paginator.page_range %}
+                                    {% if page_obj.number == num %}
+                                    <li class="page-item active"><span class="page-link">{{ num }}</span></li>
+                                    {% elif num > page_obj.number|add:'-3' and num < page_obj.number|add:'3' %}
+                                    <li class="page-item">
+                                        <a class="page-link" href="?{% if action_filter %}action={{ action_filter }}&{% endif %}page={{ num }}">{{ num }}</a>
+                                    </li>
+                                    {% endif %}
+                                {% endfor %}
+
+                                {% if page_obj.has_next %}
+                                <li class="page-item">
+                                    <a class="page-link" href="?{% if action_filter %}action={{ action_filter }}&{% endif %}page={{ page_obj.next_page_number }}">Next</a>
+                                </li>
+                                {% endif %}
+                            </ul>
+                        </nav>
+                    </div>
+                    {% endif %}
+
+                    {% else %}
+                    <div class="text-center py-5 text-muted">
+                        <i class="fas fa-history fa-3x mb-3 d-block"></i>
+                        {% if action_filter %}
+                        <p>No transactions found for this filter.</p>
+                        <a href="{% url 'authentication:points_history' %}" class="btn btn-sm btn-outline-primary">Show All</a>
+                        {% else %}
+                        <p>No point transactions yet. Start annotating to earn points!</p>
+                        {% endif %}
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

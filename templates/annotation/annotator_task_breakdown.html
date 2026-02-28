@@ -1,0 +1,136 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ annotator.username }} - Task Breakdown{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- Header -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a href="{% url 'annotation:admin_statistics_dashboard' %}">Statistics Dashboard</a></li>
+                    <li class="breadcrumb-item"><a href="{% url 'annotation:annotator_detail_stats' annotator.id %}">{{ annotator.username }}</a></li>
+                    <li class="breadcrumb-item active">Task Breakdown</li>
+                </ol>
+            </nav>
+            <h1 class="h3 mb-0">📋 {{ annotator.username }} - Complete Task Breakdown</h1>
+        </div>
+    </div>
+
+    <!-- Task List -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">All Completed Tasks</h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Document</th>
+                                    <th>Task Type</th>
+                                    <th>Duration (min)</th>
+                                    <th>Entities</th>
+                                    <th>Entities/min</th>
+                                    <th>Entity Breakdown</th>
+                                    <th>LLM Decisions</th>
+                                    <th>Completed</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in task_data %}
+                                <tr>
+                                    <td>
+                                        <strong>{{ item.task.document.title|default:"Untitled"|truncatechars:30 }}</strong>
+                                        <br><small class="text-muted">Doc #{{ item.task.document.id }}</small>
+                                    </td>
+                                    <td>
+                                        <span class="badge {% if item.task.task_type == 'ner' %}bg-primary{% else %}bg-success{% endif %}">
+                                            {{ item.task.get_task_type_display }}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <strong>{{ item.duration_minutes|floatformat:1 }}</strong>
+                                    </td>
+                                    <td>
+                                        <strong>{{ item.entities_count }}</strong>
+                                    </td>
+                                    <td>
+                                        {{ item.entities_per_minute|floatformat:2 }}
+                                    </td>
+                                    <td>
+                                        {% for entity_type, count in item.entity_stats.items %}
+                                            <span class="badge bg-secondary">{{ entity_type }}: {{ count }}</span>
+                                        {% empty %}
+                                            <span class="text-muted">-</span>
+                                        {% endfor %}
+                                    </td>
+                                    <td>
+                                        {% if item.llm_decision_summary %}
+                                            <span class="badge bg-success" title="Accepted">✓ {{ item.llm_decision_summary.accepted }}</span>
+                                            <span class="badge bg-danger" title="Rejected">✗ {{ item.llm_decision_summary.rejected }}</span>
+                                            {% if item.llm_decision_summary.manual_added > 0 %}
+                                            <br><span class="badge bg-info" title="Manually added by annotator">+ {{ item.llm_decision_summary.manual_added }} manual</span>
+                                            {% endif %}
+                                        {% else %}
+                                            <span class="text-muted">Manual</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <small>{{ item.task.completed_at|date:"Y-m-d" }}<br>{{ item.task.completed_at|time:"H:i" }}</small>
+                                    </td>
+                                    <td>
+                                        <a href="{% url 'annotation:task_detail_stats' item.task.id %}" class="btn btn-sm btn-outline-info" title="View details">
+                                            🔍 Details
+                                        </a>
+                                    </td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="9" class="text-center text-muted">No completed tasks found</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- Pagination -->
+                    {% if page_obj.has_other_pages %}
+                    <nav aria-label="Page navigation">
+                        <ul class="pagination justify-content-center">
+                            {% if page_obj.has_previous %}
+                                <li class="page-item">
+                                    <a class="page-link" href="?page=1">First</a>
+                                </li>
+                                <li class="page-item">
+                                    <a class="page-link" href="?page={{ page_obj.previous_page_number }}">Previous</a>
+                                </li>
+                            {% endif %}
+
+                            <li class="page-item active">
+                                <span class="page-link">
+                                    Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}
+                                </span>
+                            </li>
+
+                            {% if page_obj.has_next %}
+                                <li class="page-item">
+                                    <a class="page-link" href="?page={{ page_obj.next_page_number }}">Next</a>
+                                </li>
+                                <li class="page-item">
+                                    <a class="page-link" href="?page={{ page_obj.paginator.num_pages }}">Last</a>
+                                </li>
+                            {% endif %}
+                        </ul>
+                    </nav>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

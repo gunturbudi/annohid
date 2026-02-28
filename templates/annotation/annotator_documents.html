@@ -1,0 +1,423 @@
+{% extends 'base.html' %}
+
+{% block title %}My Documents - AnnoHID{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <h2 class="mb-4">📋 My Assigned Documents</h2>
+        <p class="lead">
+            Complete NER tasks first, then proceed to MCN tasks.
+            {% if user.annotation_mode == 'manual_only' %}
+            You are assigned to manual annotation mode.
+            {% elif user.annotation_mode == 'llm_assisted_only' %}
+            You are assigned to LLM-assisted annotation mode.
+            {% else %}
+            Each task can be done manually or with LLM assistance.
+            {% endif %}
+        </p>
+    </div>
+</div>
+
+<!-- Statistics -->
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card text-center border-primary">
+            <div class="card-body">
+                <h5 class="card-title text-primary">{{ total_assigned }}</h5>
+                <p class="card-text">Total Documents</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-center border-warning">
+            <div class="card-body">
+                <h5 class="card-title text-warning">{{ completed_ner }}/{{ total_ner }}</h5>
+                <p class="card-text">NER Completed</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-center border-info">
+            <div class="card-body">
+                <h5 class="card-title text-info">{{ accessible_mcn }}/{{ total_mcn }}</h5>
+                <p class="card-text">MCN Accessible</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-center border-success">
+            <div class="card-body">
+                <h5 class="card-title text-success">{{ completed_mcn }}/{{ total_mcn }}</h5>
+                <p class="card-text">MCN Completed</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- NER Tasks Section -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header bg-warning text-dark">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h5 class="card-title mb-0">
+                            🔍 Named Entity Recognition (NER) Tasks
+                            <span class="badge bg-dark ms-2">Step 1</span>
+                        </h5>
+                        <small>Complete these tasks first to unlock MCN tasks</small>
+                    </div>
+                    <div>
+                        <button type="button" class="btn btn-primary" id="batch-ner-btn" disabled>
+                            <i class="fas fa-robot"></i> Batch Multi-LLM NER (<span id="selected-count">0</span>)
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <div class="card-body">
+                {% if ner_tasks %}
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th style="width: 40px;">
+                                        <input type="checkbox" id="select-all-ner" class="form-check-input">
+                                    </th>
+                                    <th>Document</th>
+                                    <th>Content Preview</th>
+                                    {% if user.can_do_manual_annotation %}
+                                    <th>Manual Mode</th>
+                                    {% endif %}
+                                    {% if user.can_do_llm_assisted_annotation %}
+                                    <th>LLM-Assisted Mode</th>
+                                    {% endif %}
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in ner_tasks %}
+                                <tr>
+                                    <td>
+                                        <input type="checkbox" class="form-check-input ner-doc-checkbox"
+                                               data-document-id="{{ item.document.id }}">
+                                    </td>
+                                    <td>
+                                        <div>
+                                            <strong>{{ item.document.title|default:"Document"|truncatechars:30 }}</strong>
+                                            <br>
+                                            <small class="text-muted">
+                                                📄 {{ item.document.word_count }} words
+                                            </small>
+                                            <br>
+                                            <small class="text-muted">
+                                                📅 Uploaded: {{ item.document.created_at|date:"M d, Y" }}
+                                            </small>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <div class="text-truncate" style="max-width: 200px;">
+                                            {{ item.document.get_content_preview|truncatechars:100 }}
+                                        </div>
+                                    </td>
+                                    {% if user.can_do_manual_annotation %}
+                                    <td>
+                                        {% if item.manual_completed %}
+                                            <span class="badge bg-success">✓ Completed</span>
+                                            <br>
+                                            <small class="text-muted">
+                                                🕐 Finished: {{ item.manual_annotation.created_at|date:"M d, H:i" }}
+                                            </small>
+                                        {% else %}
+                                            <span class="badge bg-warning">⏳ Pending</span>
+                                        {% endif %}
+                                    </td>
+                                    {% endif %}
+                                    {% if user.can_do_llm_assisted_annotation %}
+                                    <td>
+                                        {% if item.llm_assisted_completed %}
+                                            <span class="badge bg-success">✓ Completed</span>
+                                            <br>
+                                            <small class="text-muted">
+                                                🕐 Finished: {{ item.llm_assisted_annotation.created_at|date:"M d, H:i" }}
+                                            </small>
+                                        {% else %}
+                                            <span class="badge bg-warning">⏳ Pending</span>
+                                        {% endif %}
+                                    </td>
+                                    {% endif %}
+                                    <td>
+                                        <div class="btn-group-vertical btn-group-sm" role="group">
+                                            {% if user.can_do_manual_annotation %}
+                                            <a href="{% url 'annotation:manual_annotate' item.document.id %}"
+                                               class="btn btn-outline-primary btn-sm">
+                                                📝 Manual NER
+                                            </a>
+                                            {% endif %}
+                                            {% if user.can_do_llm_assisted_annotation %}
+                                            <a href="{% url 'annotation:llm_assisted_annotate' item.document.id %}"
+                                               class="btn btn-outline-success btn-sm">
+                                                🤖 LLM-Assisted NER
+                                            </a>
+                                            {% endif %}
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <div class="text-center py-3">
+                        <i class="display-4">📭</i>
+                        <h5 class="mt-3">No NER Tasks Assigned</h5>
+                        <p class="text-muted">You don't have any NER tasks assigned to you yet.</p>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- MCN Tasks Section -->
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header bg-info text-white">
+                <h5 class="card-title mb-0">
+                    🏥 Medical Concept Normalization (MCN) Tasks
+                    <span class="badge bg-dark ms-2">Step 2</span>
+                </h5>
+                <small>Available after completing corresponding NER tasks</small>
+            </div>
+            <div class="card-body">
+                {% if mcn_tasks %}
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Document</th>
+                                    <th>Content Preview</th>
+                                    <th>NER Status</th>
+                                    {% if user.can_do_manual_annotation %}
+                                    <th>Manual MCN</th>
+                                    {% endif %}
+                                    {% if user.can_do_llm_assisted_annotation %}
+                                    <th>LLM-Assisted MCN</th>
+                                    {% endif %}
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in mcn_tasks %}
+                                <tr {% if not item.can_access %}class="table-secondary"{% endif %}>
+                                    <td>
+                                        <div>
+                                            <strong>{{ item.document.title|default:"Document"|truncatechars:30 }}</strong>
+                                            <br>
+                                            <small class="text-muted">
+                                                📄 {{ item.document.word_count }} words
+                                            </small>
+                                            <br>
+                                            <small class="text-muted">
+                                                📅 Uploaded: {{ item.document.created_at|date:"M d, Y" }}
+                                            </small>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <div class="text-truncate" style="max-width: 150px;">
+                                            {{ item.document.get_content_preview|truncatechars:80 }}
+                                        </div>
+                                    </td>
+                                    <td>
+                                        {% if item.ner_completed %}
+                                            <span class="badge bg-success">✓ NER Complete</span>
+                                        {% else %}
+                                            <span class="badge bg-secondary">🔒 NER Required</span>
+                                        {% endif %}
+                                    </td>
+                                    {% if user.can_do_manual_annotation %}
+                                    <td>
+                                        {% if item.manual_completed %}
+                                            <span class="badge bg-success">✓ Completed</span>
+                                            <br>
+                                            <small class="text-muted">
+                                                🕐 Finished: {{ item.manual_annotation.created_at|date:"M d, H:i" }}
+                                            </small>
+                                        {% elif item.can_access %}
+                                            <span class="badge bg-warning">⏳ Pending</span>
+                                        {% else %}
+                                            <span class="badge bg-secondary">🔒 Locked</span>
+                                        {% endif %}
+                                    </td>
+                                    {% endif %}
+                                    {% if user.can_do_llm_assisted_annotation %}
+                                    <td>
+                                        {% if item.llm_assisted_completed %}
+                                            <span class="badge bg-success">✓ Completed</span>
+                                            <br>
+                                            <small class="text-muted">
+                                                🕐 Finished: {{ item.llm_assisted_annotation.created_at|date:"M d, H:i" }}
+                                            </small>
+                                        {% elif item.can_access %}
+                                            <span class="badge bg-warning">⏳ Pending</span>
+                                        {% else %}
+                                            <span class="badge bg-secondary">🔒 Locked</span>
+                                        {% endif %}
+                                    </td>
+                                    {% endif %}
+                                    <td>
+                                        {% if item.can_access %}
+                                            <div class="btn-group-vertical btn-group-sm" role="group">
+                                                {% if user.can_do_manual_annotation %}
+                                                <a href="{% url 'annotation:mcn_manual' item.document.id %}" class="btn btn-outline-primary btn-sm">
+                                                    📝 Manual MCN
+                                                </a>
+                                                {% endif %}
+                                                {% if user.can_do_llm_assisted_annotation %}
+                                                <a href="{% url 'annotation:mcn_llm_assisted' item.document.id %}" class="btn btn-outline-success btn-sm">
+                                                    🤖 LLM-Assisted MCN
+                                                </a>
+                                                {% endif %}
+                                            </div>
+                                        {% else %}
+                                            <div class="text-center">
+                                                <small class="text-muted">Complete NER first</small>
+                                            </div>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <div class="text-center py-3">
+                        <i class="display-4">📭</i>
+                        <h5 class="mt-3">No MCN Tasks Assigned</h5>
+                        <p class="text-muted">You don't have any MCN tasks assigned to you yet.</p>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Workflow Information -->
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="card border-info">
+            <div class="card-header bg-info text-white">
+                <h5 class="card-title mb-0">💡 Annotation Workflow</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6 class="text-warning">🔍 Step 1: Named Entity Recognition (NER)</h6>
+                        <ul class="list-unstyled small">
+                            {% if user.can_do_manual_annotation %}
+                            <li><strong>Manual NER:</strong> Identify medical entities manually</li>
+                            {% endif %}
+                            {% if user.can_do_llm_assisted_annotation %}
+                            <li><strong>LLM-Assisted NER:</strong> Review AI-suggested entities</li>
+                            {% endif %}
+                            <li>• Extract: Symptoms, Diseases, Body Parts, Medications, Procedures</li>
+                            <li>• Must be completed before MCN tasks unlock</li>
+                        </ul>
+                    </div>
+                    <div class="col-md-6">
+                        <h6 class="text-info">🏥 Step 2: Medical Concept Normalization (MCN)</h6>
+                        <ul class="list-unstyled small">
+                            {% if user.can_do_manual_annotation %}
+                            <li><strong>Manual MCN:</strong> Map entities to SNOMED-CT manually</li>
+                            {% endif %}
+                            {% if user.can_do_llm_assisted_annotation %}
+                            <li><strong>LLM-Assisted MCN:</strong> AI normalizes terms automatically</li>
+                            {% endif %}
+                            <li>• Convert informal terms to formal medical concepts</li>
+                            <li>• Automatic SNOMED-CT searching and mapping</li>
+                        </ul>
+                    </div>
+                </div>
+                <div class="alert alert-light mt-3">
+                    <strong>📊 Time Tracking:</strong> Your time spent on NER and MCN tasks is tracked separately for performance analysis.
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Add tooltips to status badges
+    document.addEventListener('DOMContentLoaded', function() {
+        // Initialize Bootstrap tooltips if available
+        if (typeof bootstrap !== 'undefined' && bootstrap.Tooltip) {
+            var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+            var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+                return new bootstrap.Tooltip(tooltipTriggerEl);
+            });
+        }
+
+        // Batch Multi-LLM NER functionality
+        const selectAllCheckbox = document.getElementById('select-all-ner');
+        const docCheckboxes = document.querySelectorAll('.ner-doc-checkbox');
+        const batchNerBtn = document.getElementById('batch-ner-btn');
+        const selectedCountSpan = document.getElementById('selected-count');
+
+        // Update selected count and button state
+        function updateBatchButton() {
+            const checkedBoxes = document.querySelectorAll('.ner-doc-checkbox:checked');
+            const count = checkedBoxes.length;
+            selectedCountSpan.textContent = count;
+            batchNerBtn.disabled = count === 0;
+        }
+
+        // Select all functionality
+        if (selectAllCheckbox) {
+            selectAllCheckbox.addEventListener('change', function() {
+                docCheckboxes.forEach(cb => cb.checked = this.checked);
+                updateBatchButton();
+            });
+        }
+
+        // Individual checkbox changes
+        docCheckboxes.forEach(checkbox => {
+            checkbox.addEventListener('change', function() {
+                // Update select-all checkbox state
+                const allChecked = Array.from(docCheckboxes).every(cb => cb.checked);
+                const anyChecked = Array.from(docCheckboxes).some(cb => cb.checked);
+                if (selectAllCheckbox) {
+                    selectAllCheckbox.checked = allChecked;
+                    selectAllCheckbox.indeterminate = anyChecked && !allChecked;
+                }
+                updateBatchButton();
+            });
+        });
+
+        // Batch NER button click
+        if (batchNerBtn) {
+            batchNerBtn.addEventListener('click', function() {
+                const checkedBoxes = document.querySelectorAll('.ner-doc-checkbox:checked');
+                const documentIds = Array.from(checkedBoxes).map(cb => cb.dataset.documentId);
+
+                if (documentIds.length === 0) {
+                    alert('Please select at least one document.');
+                    return;
+                }
+
+                // Build URL with document IDs as query params
+                const url = new URL('{% url "annotation:batch_multi_llm_ner" %}', window.location.origin);
+                documentIds.forEach(id => url.searchParams.append('documents', id));
+
+                // Navigate to batch NER config page
+                window.location.href = url.toString();
+            });
+        }
+
+        // Initial update
+        updateBatchButton();
+    });
+</script>
+{% endblock %}

@@ -1,0 +1,303 @@
+{% extends 'base.html' %}
+
+{% block title %}Import History - AnnoHID{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h2>📋 Import History</h2>
+            <div>
+                <a href="{% url 'annotation:admin_data_management' %}" class="btn btn-outline-primary">
+                    ← Back to Data Management
+                </a>
+                <a href="{% url 'annotation:document_list' %}" class="btn btn-outline-secondary">
+                    📄 View Documents
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Import Statistics Summary -->
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card text-center border-primary">
+            <div class="card-body">
+                <h5 class="card-title text-primary">{{ page_obj.paginator.count }}</h5>
+                <p class="card-text">Total Imports</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-center border-success">
+            <div class="card-body">
+                <h5 class="card-title text-success">
+                    {% widthratio page_obj.paginator.object_list|length page_obj.paginator.object_list|length 1 %}
+                </h5>
+                <p class="card-text">This Month</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-center border-info">
+            <div class="card-body">
+                <h5 class="card-title text-info">
+                    {% for import in page_obj.paginator.object_list %}{{ import.successful_imports|add:0 }}{% empty %}0{% endfor %}
+                </h5>
+                <p class="card-text">Documents Imported</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-center border-warning">
+            <div class="card-body">
+                <h5 class="card-title text-warning">
+                    {% for import in page_obj.paginator.object_list %}{{ import.failed_imports|add:0 }}{% empty %}0{% endfor %}
+                </h5>
+                <p class="card-text">Failed Imports</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Import History Table -->
+<div class="card">
+    <div class="card-body">
+        {% if page_obj %}
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>File Name</th>
+                        <th>Imported By</th>
+                        <th>Import Date</th>
+                        <th>Total Lines</th>
+                        <th>Successful</th>
+                        <th>Failed</th>
+                        <th>Success Rate</th>
+                        <th>Settings</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for import in page_obj %}
+                    <tr>
+                        <td>
+                            <strong>{{ import.filename }}</strong>
+                            {% if import.notes %}
+                            <br><small class="text-muted">Has notes</small>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <span class="badge bg-info">{{ import.imported_by.get_role_display }}</span>
+                            <br>
+                            <small>{{ import.imported_by.username }}</small>
+                        </td>
+                        <td>
+                            <div>{{ import.imported_at|date:"M d, Y" }}</div>
+                            <small class="text-muted">{{ import.imported_at|time:"H:i" }}</small>
+                            <br>
+                            <small class="text-muted">{{ import.imported_at|timesince }} ago</small>
+                        </td>
+                        <td>
+                            <span class="badge bg-secondary">{{ import.total_lines }}</span>
+                        </td>
+                        <td>
+                            <span class="badge bg-success">{{ import.successful_imports }}</span>
+                        </td>
+                        <td>
+                            {% if import.failed_imports > 0 %}
+                            <span class="badge bg-danger">{{ import.failed_imports }}</span>
+                            {% else %}
+                            <span class="badge bg-secondary">0</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if import.total_lines > 0 %}
+                            {% widthratio import.successful_imports import.total_lines 100 as success_rate %}
+                            <div class="progress" style="height: 20px;">
+                                <div class="progress-bar bg-{% if success_rate >= 90 %}success{% elif success_rate >= 70 %}warning{% else %}danger{% endif %}"
+                                     role="progressbar"
+                                     style="width: {{ success_rate }}%">
+                                    {{ success_rate }}%
+                                </div>
+                            </div>
+                            {% else %}
+                            <span class="text-muted">N/A</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <div class="small">
+                                {% if import.skip_empty_lines %}
+                                <span class="badge bg-light text-dark">Skip Empty</span>
+                                {% endif %}
+                                {% if import.auto_assign %}
+                                <span class="badge bg-info">Auto-assign</span>
+                                {% endif %}
+                            </div>
+                        </td>
+                        <td>
+                            <div class="btn-group" role="group">
+                                <button class="btn btn-outline-primary btn-sm" onclick="viewImportDetails({{ import.id }})">
+                                    View
+                                </button>
+                                {% if import.notes %}
+                                <button class="btn btn-outline-warning btn-sm" onclick="showImportNotes({{ import.id }}, '{{ import.notes|escapejs }}')">
+                                    Notes
+                                </button>
+                                {% endif %}
+                                <button class="btn btn-outline-info btn-sm" onclick="viewImportDocuments('{{ import.filename }}')">
+                                    Documents
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Pagination -->
+        {% if page_obj.has_other_pages %}
+        <nav class="mt-4">
+            <ul class="pagination justify-content-center">
+                {% if page_obj.has_previous %}
+                    <li class="page-item">
+                        <a class="page-link" href="?page=1">&laquo; First</a>
+                    </li>
+                    <li class="page-item">
+                        <a class="page-link" href="?page={{ page_obj.previous_page_number }}">&lsaquo; Previous</a>
+                    </li>
+                {% endif %}
+
+                <li class="page-item active">
+                    <span class="page-link">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+                </li>
+
+                {% if page_obj.has_next %}
+                    <li class="page-item">
+                        <a class="page-link" href="?page={{ page_obj.next_page_number }}">Next &rsaquo;</a>
+                    </li>
+                    <li class="page-item">
+                        <a class="page-link" href="?page={{ page_obj.paginator.num_pages }}">Last &raquo;</a>
+                    </li>
+                {% endif %}
+            </ul>
+        </nav>
+        {% endif %}
+
+        {% else %}
+        <div class="text-center text-muted py-5">
+            <i class="display-1">📂</i>
+            <h4 class="mt-3">No imports found</h4>
+            <p>No text files have been imported yet.</p>
+            <a href="{% url 'annotation:admin_data_management' %}" class="btn btn-primary">
+                Import Text Data
+            </a>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Import Details Modal -->
+<div class="modal fade" id="importDetailsModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">📋 Import Details</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="import-details-content">
+                <!-- Content loaded dynamically -->
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Import Notes Modal -->
+<div class="modal fade" id="importNotesModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">⚠️ Import Notes & Errors</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="import-notes-content">
+                <!-- Content loaded dynamically -->
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function viewImportDetails(importId) {
+    // Show modal with import details
+    const modal = new bootstrap.Modal(document.getElementById('importDetailsModal'));
+    const content = document.getElementById('import-details-content');
+
+    content.innerHTML = `
+        <div class="text-center">
+            <div class="spinner-border" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+            <p class="mt-2">Loading import details...</p>
+        </div>
+    `;
+
+    modal.show();
+
+    // In a real implementation, you would fetch details via AJAX
+    setTimeout(() => {
+        content.innerHTML = `
+            <div class="alert alert-info">
+                <h6>Import Details Feature</h6>
+                <p class="mb-0">Detailed import analysis will be implemented in future versions. This would include:</p>
+                <ul class="mt-2 mb-0">
+                    <li>Line-by-line import status</li>
+                    <li>Error details for failed imports</li>
+                    <li>Import duration and performance metrics</li>
+                    <li>Related document links</li>
+                </ul>
+            </div>
+        `;
+    }, 1000);
+}
+
+function showImportNotes(importId, notes) {
+    const modal = new bootstrap.Modal(document.getElementById('importNotesModal'));
+    const content = document.getElementById('import-notes-content');
+
+    content.innerHTML = `
+        <div class="alert alert-warning">
+            <h6>Import Errors & Notes</h6>
+            <pre class="mb-0" style="white-space: pre-wrap; font-size: 0.9em;">${notes}</pre>
+        </div>
+    `;
+
+    modal.show();
+}
+
+function viewImportDocuments(filename) {
+    // Redirect to document list filtered by source file
+    const encodedFilename = encodeURIComponent(filename);
+    window.location.href = `{% url 'annotation:document_list' %}?search=${encodedFilename}`;
+}
+
+// Auto-refresh statistics every 30 seconds
+setInterval(function() {
+    if (document.visibilityState === 'visible') {
+        // In a real implementation, you would update statistics via AJAX
+        console.log('Statistics refresh (placeholder)');
+    }
+}, 30000);
+</script>
+{% endblock %}

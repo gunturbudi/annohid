@@ -1,0 +1,214 @@
+{% extends 'base.html' %}
+
+{% block title %}Leaderboard - AnnoHID{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- Header -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h2 class="mb-1">📈 Leaderboard</h2>
+                    <p class="text-muted mb-0">See how you rank against other annotators</p>
+                </div>
+                <a href="{% url 'authentication:dashboard' %}" class="btn btn-outline-secondary">
+                    ← Back to Dashboard
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Your Stats Card -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card border-0 shadow-sm" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+                <div class="card-body text-white">
+                    <div class="row align-items-center">
+                        <div class="col-md-3 text-center border-end border-light">
+                            <h6 class="text-white-50 mb-1">Your Level</h6>
+                            <h2 class="mb-0">{{ user_stats.level }}</h2>
+                            <p class="mb-0">{{ user_stats.level_title }}</p>
+                        </div>
+                        <div class="col-md-3 text-center border-end border-light">
+                            <h6 class="text-white-50 mb-1">Weekly Rank</h6>
+                            <h2 class="mb-0">#{{ weekly_rank.rank }}</h2>
+                            <p class="mb-0">of {{ weekly_rank.total_users }} annotators</p>
+                        </div>
+                        <div class="col-md-3 text-center border-end border-light">
+                            <h6 class="text-white-50 mb-1">All-Time Rank</h6>
+                            <h2 class="mb-0">#{{ alltime_rank.rank }}</h2>
+                            <p class="mb-0">of {{ alltime_rank.total_users }} annotators</p>
+                        </div>
+                        <div class="col-md-3 text-center">
+                            <h6 class="text-white-50 mb-1">Current Streak</h6>
+                            <h2 class="mb-0">🔥 {{ user_stats.current_streak }}</h2>
+                            <p class="mb-0">days in a row</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Leaderboard Tabs -->
+    <div class="row">
+        <div class="col-lg-6 mb-4">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-header bg-warning text-dark border-0">
+                    <h5 class="mb-0">⭐ Weekly Leaderboard</h5>
+                    <small>Resets every Monday</small>
+                </div>
+                <div class="card-body p-0">
+                    <table class="table table-hover mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th style="width: 60px;">Rank</th>
+                                <th>Annotator</th>
+                                <th class="text-center">Level</th>
+                                <th class="text-center">Streak</th>
+                                <th class="text-end">Points</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for leader in weekly_leaderboard %}
+                            <tr class="{% if leader.user_id == user.id %}table-warning{% endif %}">
+                                <td>
+                                    {% if leader.rank == 1 %}
+                                    <span class="fs-4">🥇</span>
+                                    {% elif leader.rank == 2 %}
+                                    <span class="fs-4">🥈</span>
+                                    {% elif leader.rank == 3 %}
+                                    <span class="fs-4">🥉</span>
+                                    {% else %}
+                                    <span class="fw-bold text-muted">{{ leader.rank }}</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <strong>{{ leader.username }}</strong>
+                                    {% if leader.user_id == user.id %}
+                                    <span class="badge bg-primary ms-1">You</span>
+                                    {% endif %}
+                                </td>
+                                <td class="text-center">
+                                    <span class="badge bg-secondary">Lv {{ leader.level }}</span>
+                                </td>
+                                <td class="text-center">
+                                    {% if leader.streak > 0 %}
+                                    <span class="text-danger">🔥{{ leader.streak }}</span>
+                                    {% else %}
+                                    <span class="text-muted">-</span>
+                                    {% endif %}
+                                </td>
+                                <td class="text-end">
+                                    <span class="badge bg-success fs-6">{{ leader.points }}</span>
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="5" class="text-center text-muted py-4">
+                                    No data yet. Be the first to earn points this week!
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-6 mb-4">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-header bg-primary text-white border-0">
+                    <h5 class="mb-0">🏆 All-Time Leaderboard</h5>
+                    <small>Total points earned</small>
+                </div>
+                <div class="card-body p-0">
+                    <table class="table table-hover mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th style="width: 60px;">Rank</th>
+                                <th>Annotator</th>
+                                <th class="text-center">Level</th>
+                                <th class="text-center">Streak</th>
+                                <th class="text-end">Points</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for leader in alltime_leaderboard %}
+                            <tr class="{% if leader.user_id == user.id %}table-primary{% endif %}">
+                                <td>
+                                    {% if leader.rank == 1 %}
+                                    <span class="fs-4">🥇</span>
+                                    {% elif leader.rank == 2 %}
+                                    <span class="fs-4">🥈</span>
+                                    {% elif leader.rank == 3 %}
+                                    <span class="fs-4">🥉</span>
+                                    {% else %}
+                                    <span class="fw-bold text-muted">{{ leader.rank }}</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <strong>{{ leader.username }}</strong>
+                                    {% if leader.user_id == user.id %}
+                                    <span class="badge bg-primary ms-1">You</span>
+                                    {% endif %}
+                                </td>
+                                <td class="text-center">
+                                    <span class="badge bg-secondary">Lv {{ leader.level }}</span>
+                                </td>
+                                <td class="text-center">
+                                    {% if leader.streak > 0 %}
+                                    <span class="text-danger">🔥{{ leader.streak }}</span>
+                                    {% else %}
+                                    <span class="text-muted">-</span>
+                                    {% endif %}
+                                </td>
+                                <td class="text-end">
+                                    <span class="badge bg-primary fs-6">{{ leader.points }}</span>
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="5" class="text-center text-muted py-4">
+                                    No data yet. Start annotating to earn points!
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tips Card -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card border-0 shadow-sm bg-light">
+                <div class="card-body">
+                    <h6 class="mb-3">💡 Tips to Climb the Leaderboard</h6>
+                    <div class="row">
+                        <div class="col-md-3">
+                            <strong>📝 Complete Annotations</strong>
+                            <p class="small text-muted mb-0">Earn 10 pts for NER, 15 pts for MCN</p>
+                        </div>
+                        <div class="col-md-3">
+                            <strong>🔥 Build Your Streak</strong>
+                            <p class="small text-muted mb-0">Annotate daily for bonus points</p>
+                        </div>
+                        <div class="col-md-3">
+                            <strong>⚡ Be Quick</strong>
+                            <p class="small text-muted mb-0">Speed bonuses for fast annotations</p>
+                        </div>
+                        <div class="col-md-3">
+                            <strong>⭐ High Quality</strong>
+                            <p class="small text-muted mb-0">Quality bonuses for high confidence</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

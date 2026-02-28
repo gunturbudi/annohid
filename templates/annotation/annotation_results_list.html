@@ -1,0 +1,166 @@
+{% extends 'base.html' %}
+
+{% block title %}Annotation Results - AnnoHID{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h2>🎯 Annotation Results</h2>
+            <div>
+                <a href="{% url 'annotation:document_list' %}" class="btn btn-outline-primary">
+                    📄 Documents
+                </a>
+                <a href="{% url 'annotation:admin_data_management' %}" class="btn btn-outline-secondary">
+                    📊 Data Management
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Filters -->
+<div class="card mb-4">
+    <div class="card-body">
+        <form method="get" class="row g-3">
+            <div class="col-md-3">
+                <label class="form-label">Model</label>
+                <select name="model" class="form-select">
+                    <option value="all" {% if model_filter == 'all' %}selected{% endif %}>All Models</option>
+                    {% for model in available_models %}
+                    <option value="{{ model }}" {% if model_filter == model %}selected{% endif %}>{{ model }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">Type</label>
+                <select name="type" class="form-select">
+                    <option value="all" {% if type_filter == 'all' %}selected{% endif %}>All Types</option>
+                    {% for value, label in annotation_types %}
+                    <option value="{{ value }}" {% if type_filter == value %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">Status</label>
+                <select name="status" class="form-select">
+                    <option value="all" {% if status_filter == 'all' %}selected{% endif %}>All Statuses</option>
+                    {% for value, label in review_statuses %}
+                    <option value="{{ value }}" {% if status_filter == value %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">&nbsp;</label>
+                <button type="submit" class="btn btn-primary d-block">Filter</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Results Table -->
+<div class="card">
+    <div class="card-body">
+        {% if page_obj %}
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>Document</th>
+                        <th>Model</th>
+                        <th>Entities</th>
+                        <th>Confidence</th>
+                        <th>Status</th>
+                        <th>Annotator</th>
+                        <th>Created</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for annotation in page_obj %}
+                    <tr>
+                        <td>
+                            <div style="max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="{{ annotation.document.content }}">
+                                {{ annotation.document.get_content_preview }}
+                            </div>
+                        </td>
+                        <td>
+                            <span class="badge bg-info">{{ annotation.model_used }}</span>
+                        </td>
+                        <td>
+                            <span class="badge bg-primary">{{ annotation.total_entities }}</span>
+                        </td>
+                        <td>
+                            {% if annotation.confidence_score %}
+                            <span class="badge bg-success">{{ annotation.confidence_score|floatformat:1 }}%</span>
+                            {% else %}
+                            <span class="text-muted">N/A</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <span class="badge bg-{% if annotation.review_status == 'approved' %}success{% elif annotation.review_status == 'rejected' %}danger{% else %}warning{% endif %}">
+                                {{ annotation.get_review_status_display }}
+                            </span>
+                        </td>
+                        <td>{{ annotation.annotator.username }}</td>
+                        <td>
+                            <small class="text-muted">{{ annotation.created_at|timesince }} ago</small>
+                        </td>
+                        <td>
+                            <div class="btn-group" role="group">
+                                <a href="{% url 'annotation:view_annotation_result' annotation.id %}" class="btn btn-outline-primary btn-sm">
+                                    View
+                                </a>
+                                <a href="{% url 'annotation:document_detail' annotation.document.id %}" class="btn btn-outline-secondary btn-sm">
+                                    Document
+                                </a>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Pagination -->
+        {% if page_obj.has_other_pages %}
+        <nav class="mt-4">
+            <ul class="pagination justify-content-center">
+                {% if page_obj.has_previous %}
+                    <li class="page-item">
+                        <a class="page-link" href="?page=1{% if model_filter != 'all' %}&model={{ model_filter }}{% endif %}{% if type_filter != 'all' %}&type={{ type_filter }}{% endif %}{% if status_filter != 'all' %}&status={{ status_filter }}{% endif %}">&laquo; First</a>
+                    </li>
+                    <li class="page-item">
+                        <a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if model_filter != 'all' %}&model={{ model_filter }}{% endif %}{% if type_filter != 'all' %}&type={{ type_filter }}{% endif %}{% if status_filter != 'all' %}&status={{ status_filter }}{% endif %}">&lsaquo; Previous</a>
+                    </li>
+                {% endif %}
+
+                <li class="page-item active">
+                    <span class="page-link">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+                </li>
+
+                {% if page_obj.has_next %}
+                    <li class="page-item">
+                        <a class="page-link" href="?page={{ page_obj.next_page_number }}{% if model_filter != 'all' %}&model={{ model_filter }}{% endif %}{% if type_filter != 'all' %}&type={{ type_filter }}{% endif %}{% if status_filter != 'all' %}&status={{ status_filter }}{% endif %}">Next &rsaquo;</a>
+                    </li>
+                    <li class="page-item">
+                        <a class="page-link" href="?page={{ page_obj.paginator.num_pages }}{% if model_filter != 'all' %}&model={{ model_filter }}{% endif %}{% if type_filter != 'all' %}&type={{ type_filter }}{% endif %}{% if status_filter != 'all' %}&status={{ status_filter }}{% endif %}">Last &raquo;</a>
+                    </li>
+                {% endif %}
+            </ul>
+        </nav>
+        {% endif %}
+
+        {% else %}
+        <div class="text-center text-muted py-5">
+            <i class="display-1">🎯</i>
+            <h4 class="mt-3">No annotation results found</h4>
+            <p>Start by annotating some documents to see results here.</p>
+            <a href="{% url 'annotation:document_list' %}" class="btn btn-primary">
+                Browse Documents
+            </a>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

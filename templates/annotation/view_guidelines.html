@@ -1,0 +1,201 @@
+{% extends 'base.html' %}
+
+{% block title %}Annotation Guidelines - AnnoHID{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h2 class="mb-0">📋 Annotation Guidelines</h2>
+            {% if user.is_admin %}
+            <a href="{% url 'annotation:admin_guidelines' %}" class="btn btn-outline-primary">
+                ⚙️ Manage Guidelines
+            </a>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+{% if total_guidelines > 0 %}
+    <div class="row">
+        {% for guideline in page_obj %}
+        <div class="col-lg-6 mb-4">
+            <div class="card h-100">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="card-title mb-0">{{ guideline.title }}</h5>
+                    <small class="text-muted">{{ guideline.created_at|date:"M d, Y" }}</small>
+                </div>
+                <div class="card-body d-flex flex-column">
+                    {% if guideline.description %}
+                        <p class="card-text text-muted">{{ guideline.description }}</p>
+                    {% endif %}
+
+                    <div class="mb-3 flex-grow-1">
+                        <p class="card-text">{{ guideline.get_content_preview }}</p>
+                    </div>
+
+                    <div class="mt-auto">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <small class="text-muted">
+                                By {{ guideline.uploaded_by.username }}
+                            </small>
+                            <a href="{% url 'annotation:guideline_detail' guideline.id %}"
+                               class="btn btn-primary">
+                                📖 Read Full Guideline
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- Pagination -->
+    {% if page_obj.has_other_pages %}
+    <nav aria-label="Guidelines pagination">
+        <ul class="pagination justify-content-center">
+            {% if page_obj.has_previous %}
+                <li class="page-item">
+                    <a class="page-link" href="?page=1">First</a>
+                </li>
+                <li class="page-item">
+                    <a class="page-link" href="?page={{ page_obj.previous_page_number }}">Previous</a>
+                </li>
+            {% endif %}
+
+            {% for num in page_obj.paginator.page_range %}
+                {% if page_obj.number == num %}
+                    <li class="page-item active">
+                        <span class="page-link">{{ num }}</span>
+                    </li>
+                {% elif num > page_obj.number|add:'-3' and num < page_obj.number|add:'3' %}
+                    <li class="page-item">
+                        <a class="page-link" href="?page={{ num }}">{{ num }}</a>
+                    </li>
+                {% endif %}
+            {% endfor %}
+
+            {% if page_obj.has_next %}
+                <li class="page-item">
+                    <a class="page-link" href="?page={{ page_obj.next_page_number }}">Next</a>
+                </li>
+                <li class="page-item">
+                    <a class="page-link" href="?page={{ page_obj.paginator.num_pages }}">Last</a>
+                </li>
+            {% endif %}
+        </ul>
+    </nav>
+    {% endif %}
+{% else %}
+    <div class="text-center py-5">
+        <div class="mb-4">
+            <i class="display-1">📋</i>
+        </div>
+        <h4 class="text-muted">No guidelines available</h4>
+        <p class="text-muted">
+            {% if user.is_admin %}
+                No guidelines have been uploaded yet. Upload the first guideline to help annotators.
+            {% else %}
+                No active guidelines are currently available. Please contact your administrator.
+            {% endif %}
+        </p>
+        {% if user.is_admin %}
+        <a href="{% url 'annotation:upload_guideline' %}" class="btn btn-primary">
+            ➕ Upload First Guideline
+        </a>
+        {% endif %}
+    </div>
+{% endif %}
+
+<!-- Quick Help Section -->
+<div class="row mt-5">
+    <div class="col-12">
+        <div class="card border-info">
+            <div class="card-header bg-info text-white">
+                <h6 class="card-title mb-0">💡 How to Use Guidelines</h6>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-4">
+                        <h6>📖 Reading Guidelines</h6>
+                        <ul class="small">
+                            <li>Click "Read Full Guideline" to see complete content</li>
+                            <li>Guidelines include entity definitions and examples</li>
+                            <li>Refer to guidelines before starting annotation</li>
+                        </ul>
+                    </div>
+                    <div class="col-md-4">
+                        <h6>🎯 During Annotation</h6>
+                        <ul class="small">
+                            <li>Keep guidelines open in another tab</li>
+                            <li>Follow the specified entity types</li>
+                            <li>When in doubt, refer back to examples</li>
+                        </ul>
+                    </div>
+                    <div class="col-md-4">
+                        <h6>❓ Need Help?</h6>
+                        <ul class="small">
+                            <li>Read guidelines thoroughly before starting</li>
+                            <li>Contact your administrator if unclear</li>
+                            <li>Guidelines are updated regularly</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Add hover effects to guideline cards
+    const cards = document.querySelectorAll('.card');
+    cards.forEach(card => {
+        card.addEventListener('mouseenter', function() {
+            this.classList.add('shadow-lg');
+            this.style.transform = 'translateY(-2px)';
+            this.style.transition = 'all 0.3s ease';
+        });
+
+        card.addEventListener('mouseleave', function() {
+            this.classList.remove('shadow-lg');
+            this.style.transform = 'translateY(0)';
+        });
+    });
+
+    // Smooth scroll to top when pagination is clicked
+    const paginationLinks = document.querySelectorAll('.pagination .page-link');
+    paginationLinks.forEach(link => {
+        link.addEventListener('click', function() {
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        });
+    });
+});
+</script>
+
+<style>
+.card {
+    transition: all 0.3s ease;
+}
+
+.card:hover {
+    border-color: #0d6efd;
+}
+
+.card-text {
+    line-height: 1.6;
+}
+
+.pagination .page-link {
+    color: #0d6efd;
+}
+
+.pagination .page-item.active .page-link {
+    background-color: #0d6efd;
+    border-color: #0d6efd;
+}
+</style>
+{% endblock %}

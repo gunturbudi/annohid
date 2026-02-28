@@ -1,0 +1,176 @@
+{% extends 'base.html' %}
+
+{% block title %}Edit Guideline - AnnoHID{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h2 class="mb-0">✏️ Edit Guideline</h2>
+            <div class="btn-group" role="group">
+                <a href="{% url 'annotation:guideline_detail' guideline.id %}" class="btn btn-outline-info">
+                    👁️ View
+                </a>
+                <a href="{% url 'annotation:admin_guidelines' %}" class="btn btn-secondary">
+                    ← Back to Guidelines
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-lg-8 mx-auto">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">📝 Edit "{{ guideline.title }}"</h5>
+            </div>
+            <div class="card-body">
+                <form method="post">
+                    {% csrf_token %}
+
+                    <div class="mb-3">
+                        <label for="title" class="form-label">
+                            <strong>Title <span class="text-danger">*</span></strong>
+                        </label>
+                        <input type="text" class="form-control" id="title" name="title"
+                               value="{{ guideline.title }}" required maxlength="255">
+                        <div class="form-text">A clear, descriptive title for the guideline</div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="description" class="form-label">
+                            <strong>Description</strong>
+                        </label>
+                        <textarea class="form-control" id="description" name="description" rows="3">{{ guideline.description }}</textarea>
+                        <div class="form-text">Optional brief description of what this guideline covers</div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="content" class="form-label">
+                            <strong>Content <span class="text-danger">*</span></strong>
+                        </label>
+                        <textarea class="form-control" id="content" name="content" rows="15" required>{{ guideline.content }}</textarea>
+                        <div class="form-text">
+                            The main content of the guideline. You can use plain text or basic formatting.
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="is_active" name="is_active"
+                                   {% if guideline.is_active %}checked{% endif %}>
+                            <label class="form-check-label" for="is_active">
+                                <strong>Active</strong>
+                            </label>
+                            <div class="form-text">
+                                When active, this guideline will be visible to annotators.
+                                Uncheck to save as draft.
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6">
+                            <button type="submit" class="btn btn-success btn-lg w-100">
+                                💾 Update Guideline
+                            </button>
+                        </div>
+                        <div class="col-md-6">
+                            <a href="{% url 'annotation:admin_guidelines' %}" class="btn btn-secondary btn-lg w-100">
+                                ❌ Cancel
+                            </a>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Guideline Info -->
+        <div class="card mt-4">
+            <div class="card-header bg-light">
+                <h6 class="card-title mb-0">ℹ️ Guideline Information</h6>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <strong>Created:</strong> {{ guideline.created_at|date:"M d, Y H:i" }}<br>
+                        <strong>Last Updated:</strong> {{ guideline.updated_at|date:"M d, Y H:i" }}<br>
+                    </div>
+                    <div class="col-md-6">
+                        <strong>Uploaded By:</strong> {{ guideline.uploaded_by.username }}<br>
+                        <strong>Status:</strong>
+                        {% if guideline.is_active %}
+                            <span class="badge bg-success">Active</span>
+                        {% else %}
+                            <span class="badge bg-secondary">Inactive</span>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Auto-resize textarea
+    const contentTextarea = document.getElementById('content');
+    contentTextarea.addEventListener('input', function() {
+        this.style.height = 'auto';
+        this.style.height = (this.scrollHeight) + 'px';
+    });
+
+    // Character counter for title
+    const titleInput = document.getElementById('title');
+    const titleCounter = document.createElement('small');
+    titleCounter.className = 'text-muted';
+    titleInput.parentNode.appendChild(titleCounter);
+
+    function updateTitleCounter() {
+        const remaining = 255 - titleInput.value.length;
+        titleCounter.textContent = `${titleInput.value.length}/255 characters`;
+        titleCounter.className = remaining < 50 ? 'text-warning' : 'text-muted';
+    }
+
+    titleInput.addEventListener('input', updateTitleCounter);
+    updateTitleCounter(); // Initial call
+
+    // Form validation
+    const form = document.querySelector('form');
+    form.addEventListener('submit', function(e) {
+        const title = titleInput.value.trim();
+        const content = contentTextarea.value.trim();
+
+        if (!title || !content) {
+            e.preventDefault();
+            alert('Please fill in all required fields (Title and Content).');
+            return false;
+        }
+
+        if (title.length > 255) {
+            e.preventDefault();
+            alert('Title must be 255 characters or less.');
+            return false;
+        }
+
+        // Confirm if making guideline inactive
+        const isActive = document.getElementById('is_active').checked;
+        const wasActive = {{ guideline.is_active|yesno:"true,false" }};
+
+        if (wasActive && !isActive) {
+            if (!confirm('Are you sure you want to make this guideline inactive? It will no longer be visible to annotators.')) {
+                e.preventDefault();
+                return false;
+            }
+        }
+    });
+
+    // Auto-adjust textarea height on load
+    contentTextarea.style.height = 'auto';
+    contentTextarea.style.height = (contentTextarea.scrollHeight) + 'px';
+});
+</script>
+{% endblock %}

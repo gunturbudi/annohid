@@ -1,0 +1,46 @@
+services:
+  db:
+    image: mysql:8.0
+    container_name: django_annotation_db
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: root_password
+      MYSQL_DATABASE: annotation_db
+      MYSQL_USER: annotation_user
+      MYSQL_PASSWORD: annotation_pass
+    ports:
+      - "3307:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  web:
+    build: .
+    container_name: django_annotation_web
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - .:/app
+      - static_files:/app/staticfiles
+    ports:
+      - "8810:8810"
+    environment:
+      - DEBUG=1
+      - DJANGO_SETTINGS_MODULE=medical_annotation.settings
+      - DB_ENGINE=mysql
+      - DB_NAME=annotation_db
+      - DB_USER=annotation_user
+      - DB_PASSWORD=annotation_pass
+      - DB_HOST=db
+      - DB_PORT=3306
+    stdin_open: true
+    tty: true
+
+volumes:
+  mysql_data:
+  static_files:

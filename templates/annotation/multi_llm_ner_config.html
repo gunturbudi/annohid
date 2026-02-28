@@ -1,0 +1,131 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Configure Multi-LLM NER{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card shadow">
+                <div class="card-header bg-primary text-white">
+                    <h3 class="mb-0"><i class="fas fa-brain"></i> Configure Multi-LLM NER</h3>
+                </div>
+                <div class="card-body">
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle"></i>
+                        <strong>Multi-LLM NER</strong> runs entity recognition with multiple language models,
+                        allowing you to compare results and select the best predictions.
+                    </div>
+
+                    <h5 class="mb-3">Document:</h5>
+                    <div class="card mb-4">
+                        <div class="card-body">
+                            <h6>{{ document.title|default:"Untitled" }}</h6>
+                            <p class="text-muted mb-2">{{ document.content|truncatewords:50 }}</p>
+                            <small class="text-muted">
+                                {{ document.word_count }} words | {{ document.character_count }} characters
+                            </small>
+                        </div>
+                    </div>
+
+                    <form method="post" id="config-form">
+                        {% csrf_token %}
+
+                        <h5 class="mb-3">Select Models:</h5>
+
+                        {% if available_providers %}
+                        <div class="mb-4">
+                            {% for provider in available_providers %}
+                            <div class="form-check mb-2">
+                                <input class="form-check-input" type="checkbox" name="models"
+                                       value="{{ provider.model_id }}"
+                                       id="model-{{ forloop.counter }}"
+                                       {% if provider.model_id in default_models %}checked{% endif %}>
+                                <label class="form-check-label" for="model-{{ forloop.counter }}">
+                                    <strong>{{ provider.display_name }}</strong>
+                                    <span class="badge bg-secondary">{{ provider.provider }}</span>
+                                </label>
+                            </div>
+                            {% endfor %}
+                        </div>
+
+                        <div class="alert alert-warning">
+                            <i class="fas fa-exclamation-triangle"></i>
+                            <strong>Note:</strong> Running multiple models will consume API credits from each provider.
+                            Processing time increases with the number of models selected.
+                        </div>
+
+                        <h5 class="mb-3">Options:</h5>
+
+                        <div class="mb-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="enable_overlapping"
+                                       id="enable-overlapping" checked value="true">
+                                <label class="form-check-label" for="enable-overlapping">
+                                    <strong>Enable Overlapping Entity Detection</strong><br>
+                                    <small class="text-muted">
+                                        Detect entities that overlap or share the same text spans
+                                        (e.g., "chest" in "chest pain" as both BODY_PART and part of SYMPTOM)
+                                    </small>
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="mb-4">
+                            <label for="confidence-threshold" class="form-label">
+                                <strong>Confidence Threshold:</strong>
+                                <span id="threshold-value">0.3</span>
+                            </label>
+                            <input type="range" class="form-range" name="confidence_threshold"
+                                   id="confidence-threshold" min="0" max="1" step="0.1" value="0.3">
+                            <small class="text-muted">
+                                Only entities with confidence above this threshold will be included
+                            </small>
+                        </div>
+
+                        <div class="d-grid gap-2">
+                            <button type="submit" class="btn btn-primary btn-lg" id="run-btn">
+                                <i class="fas fa-play"></i> Run Multi-LLM NER
+                            </button>
+                            <a href="{% url 'annotation:annotator_documents' %}" class="btn btn-outline-secondary">
+                                <i class="fas fa-times"></i> Cancel
+                            </a>
+                        </div>
+
+                        {% else %}
+                        <div class="alert alert-danger">
+                            <h5><i class="fas fa-exclamation-circle"></i> No Models Available</h5>
+                            <p>No LLM providers are currently configured. Please configure API keys in your environment:</p>
+                            <ul>
+                                <li><code>GEMINI_API_KEY</code> for Google Gemini models</li>
+                                <li><code>OPENAI_API_KEY</code> for OpenAI GPT models</li>
+                                <li><code>ANTHROPIC_API_KEY</code> for Claude models</li>
+                            </ul>
+                        </div>
+                        {% endif %}
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const thresholdInput = document.getElementById('confidence-threshold');
+    const thresholdValue = document.getElementById('threshold-value');
+    const form = document.getElementById('config-form');
+    const runBtn = document.getElementById('run-btn');
+
+    thresholdInput.addEventListener('input', function() {
+        thresholdValue.textContent = this.value;
+    });
+
+    form.addEventListener('submit', function() {
+        runBtn.disabled = true;
+        runBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Running NER...';
+    });
+});
+</script>
+{% endblock %}

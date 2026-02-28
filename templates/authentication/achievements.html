@@ -1,0 +1,210 @@
+{% extends 'base.html' %}
+
+{% block title %}Achievements - AnnoHID{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- Header -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h2 class="mb-1">🏅 Achievements</h2>
+                    <p class="text-muted mb-0">{{ earned_count }} of {{ total_achievements }} achievements unlocked</p>
+                </div>
+                <a href="{% url 'authentication:dashboard' %}" class="btn btn-outline-secondary">
+                    ← Back to Dashboard
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Progress Overview -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body">
+                    <div class="d-flex align-items-center justify-content-between mb-3">
+                        <h6 class="mb-0">Overall Progress</h6>
+                        <span class="badge bg-primary fs-6">{{ earned_count }}/{{ total_achievements }}</span>
+                    </div>
+                    <div class="progress" style="height: 25px;">
+                        <div class="progress-bar bg-success" role="progressbar"
+                            style="width: {% widthratio earned_count total_achievements 100 %}%;">
+                            {% widthratio earned_count total_achievements 100 %}%
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bronze Achievements -->
+    {% if bronze %}
+    <div class="row mb-4">
+        <div class="col-12">
+            <h5 class="mb-3">🥉 Bronze Achievements</h5>
+            <div class="row">
+                {% for item in bronze %}
+                <div class="col-md-4 col-lg-3 mb-3">
+                    <div class="card h-100 border-0 shadow-sm {% if not item.is_earned %}opacity-50{% endif %}">
+                        <div class="card-body text-center"
+                            style="background: linear-gradient(135deg, #cd7f3222, #cd7f3211);">
+                            <div class="display-4 mb-2">{{ item.achievement.icon }}</div>
+                            <h6 class="mb-1">{{ item.achievement.name }}</h6>
+                            <p class="small text-muted mb-2">{{ item.achievement.description }}</p>
+
+                            {% if item.is_earned %}
+                            <span class="badge bg-success">✓ Unlocked</span>
+                            <div class="small text-muted mt-1">{{ item.earned_at|timesince }} ago</div>
+                            {% else %}
+                            <div class="progress mb-2" style="height: 8px;">
+                                <div class="progress-bar bg-warning" role="progressbar"
+                                    style="width: {{ item.progress_percent }}%;">
+                                </div>
+                            </div>
+                            <small class="text-muted">{{ item.progress }}/{{ item.progress_total }}</small>
+                            {% endif %}
+
+                            {% if item.achievement.points_reward > 0 %}
+                            <div class="mt-2">
+                                <span class="badge bg-warning text-dark">+{{ item.achievement.points_reward }}
+                                    pts</span>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Silver Achievements -->
+    {% if silver %}
+    <div class="row mb-4">
+        <div class="col-12">
+            <h5 class="mb-3">🥈 Silver Achievements</h5>
+            <div class="row">
+                {% for item in silver %}
+                <div class="col-md-4 col-lg-3 mb-3">
+                    <div class="card h-100 border-0 shadow-sm {% if not item.is_earned %}opacity-50{% endif %}">
+                        <div class="card-body text-center"
+                            style="background: linear-gradient(135deg, #c0c0c022, #c0c0c011);">
+                            <div class="display-4 mb-2">{{ item.achievement.icon }}</div>
+                            <h6 class="mb-1">{{ item.achievement.name }}</h6>
+                            <p class="small text-muted mb-2">{{ item.achievement.description }}</p>
+
+                            {% if item.is_earned %}
+                            <span class="badge bg-success">✓ Unlocked</span>
+                            <div class="small text-muted mt-1">{{ item.earned_at|timesince }} ago</div>
+                            {% else %}
+                            <div class="progress mb-2" style="height: 8px;">
+                                <div class="progress-bar bg-secondary" role="progressbar"
+                                    style="width: {{ item.progress_percent }}%;">
+                                </div>
+                            </div>
+                            <small class="text-muted">{{ item.progress }}/{{ item.progress_total }}</small>
+                            {% endif %}
+
+                            {% if item.achievement.points_reward > 0 %}
+                            <div class="mt-2">
+                                <span class="badge bg-warning text-dark">+{{ item.achievement.points_reward }}
+                                    pts</span>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Gold Achievements -->
+    {% if gold %}
+    <div class="row mb-4">
+        <div class="col-12">
+            <h5 class="mb-3">🥇 Gold Achievements</h5>
+            <div class="row">
+                {% for item in gold %}
+                <div class="col-md-4 col-lg-3 mb-3">
+                    <div class="card h-100 border-0 shadow-sm {% if not item.is_earned %}opacity-50{% endif %}">
+                        <div class="card-body text-center"
+                            style="background: linear-gradient(135deg, #ffd70022, #ffd70011);">
+                            <div class="display-4 mb-2">{{ item.achievement.icon }}</div>
+                            <h6 class="mb-1">{{ item.achievement.name }}</h6>
+                            <p class="small text-muted mb-2">{{ item.achievement.description }}</p>
+
+                            {% if item.is_earned %}
+                            <span class="badge bg-success">✓ Unlocked</span>
+                            <div class="small text-muted mt-1">{{ item.earned_at|timesince }} ago</div>
+                            {% else %}
+                            <div class="progress mb-2" style="height: 8px;">
+                                <div class="progress-bar bg-warning" role="progressbar"
+                                    style="width: {{ item.progress_percent }}%;">
+                                </div>
+                            </div>
+                            <small class="text-muted">{{ item.progress }}/{{ item.progress_total }}</small>
+                            {% endif %}
+
+                            {% if item.achievement.points_reward > 0 %}
+                            <div class="mt-2">
+                                <span class="badge bg-warning text-dark">+{{ item.achievement.points_reward }}
+                                    pts</span>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Platinum Achievements -->
+    {% if platinum %}
+    <div class="row mb-4">
+        <div class="col-12">
+            <h5 class="mb-3">👑 Platinum Achievements</h5>
+            <div class="row">
+                {% for item in platinum %}
+                <div class="col-md-4 col-lg-3 mb-3">
+                    <div class="card h-100 border-0 shadow-sm {% if not item.is_earned %}opacity-50{% endif %}">
+                        <div class="card-body text-center"
+                            style="background: linear-gradient(135deg, #e5e4e222, #e5e4e211);">
+                            <div class="display-4 mb-2">{{ item.achievement.icon }}</div>
+                            <h6 class="mb-1">{{ item.achievement.name }}</h6>
+                            <p class="small text-muted mb-2">{{ item.achievement.description }}</p>
+
+                            {% if item.is_earned %}
+                            <span class="badge bg-success">✓ Unlocked</span>
+                            <div class="small text-muted mt-1">{{ item.earned_at|timesince }} ago</div>
+                            {% else %}
+                            <div class="progress mb-2" style="height: 8px;">
+                                <div class="progress-bar bg-dark" role="progressbar"
+                                    style="width: {{ item.progress_percent }}%;">
+                                </div>
+                            </div>
+                            <small class="text-muted">{{ item.progress }}/{{ item.progress_total }}</small>
+                            {% endif %}
+
+                            {% if item.achievement.points_reward > 0 %}
+                            <div class="mt-2">
+                                <span class="badge bg-warning text-dark">+{{ item.achievement.points_reward }}
+                                    pts</span>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,373 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}LLM API Key Management{% endblock %}
+
+{% block extra_css %}
+<style>
+    .provider-card {
+        border-left: 4px solid;
+        transition: all 0.2s;
+    }
+    .provider-card.configured { border-color: #198754; }
+    .provider-card.not-configured { border-color: #dc3545; }
+    .provider-card:hover {
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    }
+
+    .key-item {
+        background-color: #f8f9fa;
+        padding: 1rem;
+        margin: 0.5rem 0;
+        border-radius: 0.5rem;
+    }
+    .key-item.active {
+        border-left: 3px solid #198754;
+    }
+    .key-item.inactive {
+        opacity: 0.6;
+        border-left: 3px solid #6c757d;
+    }
+
+    .status-badge {
+        padding: 0.25rem 0.75rem;
+        border-radius: 1rem;
+        font-size: 0.875rem;
+        font-weight: 600;
+    }
+    .status-valid { background-color: #d1e7dd; color: #0f5132; }
+    .status-invalid { background-color: #f8d7da; color: #842029; }
+    .status-untested { background-color: #e2e3e5; color: #41464b; }
+
+    .priority-badge {
+        position: absolute;
+        top: 1rem;
+        right: 1rem;
+        padding: 0.25rem 0.5rem;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border-radius: 0.25rem;
+        font-size: 0.75rem;
+        font-weight: bold;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h2><i class="fas fa-key"></i> LLM API Key Management</h2>
+                    <p class="text-muted mb-0">Configure API keys for different LLM providers</p>
+                </div>
+                <div>
+                    <button class="btn btn-primary" onclick="testAllKeys()">
+                        <i class="fas fa-vial"></i> Test All Keys
+                    </button>
+                    <a href="{% url 'authentication:dashboard' %}" class="btn btn-outline-secondary">
+                        <i class="fas fa-arrow-left"></i> Back to Dashboard
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Summary Stats -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card bg-primary text-white">
+                <div class="card-body">
+                    <h3 class="mb-0">{{ total_providers }}</h3>
+                    <small>Total Providers</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-success text-white">
+                <div class="card-body">
+                    <h3 class="mb-0">{{ configured_providers }}</h3>
+                    <small>Configured</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-warning text-white">
+                <div class="card-body">
+                    <h3 class="mb-0">{{ available_providers|length }}</h3>
+                    <small>Available Models</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-info text-white">
+                <div class="card-body">
+                    <h3 class="mb-0">{{ openrouter_models|length }}</h3>
+                    <small>OpenRouter Models</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Global Configuration -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header bg-light">
+                    <h5 class="mb-0"><i class="fas fa-cog"></i> Global LLM Configuration</h5>
+                </div>
+                <div class="card-body">
+                    <form method="post" action="{% url 'annotation:update_llm_config' %}">
+                        {% csrf_token %}
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label class="form-label">Preferred Provider</label>
+                                    <select class="form-select" name="preferred_provider">
+                                        <option value="">-- Select Provider --</option>
+                                        {% for provider in providers %}
+                                        <option value="{{ provider.id }}" {% if config.preferred_provider.id == provider.id %}selected{% endif %}>
+                                            {{ provider.display_name }}
+                                        </option>
+                                        {% endfor %}
+                                    </select>
+                                    <small class="text-muted">Recommended: OpenRouter (access to 100+ models with one key)</small>
+                                </div>
+
+                                <div class="form-check mb-3">
+                                    <input class="form-check-input" type="checkbox" name="enable_fallback"
+                                           id="enable-fallback" {% if config.enable_fallback %}checked{% endif %}>
+                                    <label class="form-check-label" for="enable-fallback">
+                                        Enable Fallback to Other Providers
+                                    </label>
+                                </div>
+
+                                <div class="form-check mb-3">
+                                    <input class="form-check-input" type="checkbox" name="enable_cost_tracking"
+                                           id="enable-cost-tracking" {% if config.enable_cost_tracking %}checked{% endif %}>
+                                    <label class="form-check-label" for="enable-cost-tracking">
+                                        Enable Cost Tracking
+                                    </label>
+                                </div>
+                            </div>
+
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label class="form-label">Monthly Budget (USD)</label>
+                                    <input type="number" class="form-control" name="monthly_budget_usd"
+                                           value="{{ config.monthly_budget_usd|default:'' }}" step="0.01">
+                                    <small class="text-muted">Optional: Set monthly API spending limit</small>
+                                </div>
+
+                                <div class="mb-3">
+                                    <label class="form-label">Max Requests Per Hour</label>
+                                    <input type="number" class="form-control" name="max_requests_per_hour"
+                                           value="{{ config.max_requests_per_hour|default:'' }}">
+                                    <small class="text-muted">Optional: Rate limiting for all providers</small>
+                                </div>
+                            </div>
+                        </div>
+
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-save"></i> Save Configuration
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Providers List -->
+    <div class="row">
+        <div class="col-12">
+            <h4 class="mb-3">LLM Providers</h4>
+        </div>
+
+        {% for provider in providers %}
+        <div class="col-md-6 mb-4">
+            <div class="card provider-card {% if provider.has_api_key %}configured{% else %}not-configured{% endif %}">
+                {% if provider.priority >= 100 %}
+                <div class="priority-badge">
+                    <i class="fas fa-star"></i> RECOMMENDED
+                </div>
+                {% endif %}
+
+                <div class="card-header">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">
+                            {{ provider.display_name }}
+                            {% if provider.has_api_key %}
+                                <span class="badge bg-success ms-2">✓ Configured</span>
+                            {% else %}
+                                <span class="badge bg-danger ms-2">✗ Not Configured</span>
+                            {% endif %}
+                        </h5>
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" {% if provider.is_active %}checked{% endif %}
+                                   onchange="toggleProvider({{ provider.id }}, this.checked)">
+                            <label class="form-check-label">Active</label>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card-body">
+                    <p class="text-muted">{{ provider.description }}</p>
+
+                    <div class="mb-3">
+                        <strong>Environment Variable:</strong>
+                        <code>{{ provider.env_var_name }}</code>
+                        {% if provider.get_api_key %}
+                            <span class="badge bg-success ms-2">✓ Set</span>
+                        {% else %}
+                            <span class="badge bg-warning ms-2">Not Set</span>
+                        {% endif %}
+                    </div>
+
+                    {% if provider.documentation_url %}
+                    <div class="mb-3">
+                        <a href="{{ provider.documentation_url }}" target="_blank" class="btn btn-sm btn-outline-primary">
+                            <i class="fas fa-book"></i> Documentation
+                        </a>
+                    </div>
+                    {% endif %}
+
+                    <!-- API Keys from Database -->
+                    <div class="mt-3">
+                        <h6>Configured Keys:</h6>
+                        {% if provider.api_keys.all %}
+                            {% for key in provider.api_keys.all %}
+                            <div class="key-item {% if key.is_active %}active{% else %}inactive{% endif %}">
+                                <div class="d-flex justify-content-between align-items-start">
+                                    <div class="flex-grow-1">
+                                        <div class="fw-bold">{{ key.key_name }}</div>
+                                        <div class="text-muted small">{{ key.mask_key }}</div>
+                                        <div class="mt-2">
+                                            <span class="status-badge status-{{ key.test_status }}">
+                                                {{ key.get_test_status_display }}
+                                            </span>
+                                            {% if key.last_tested %}
+                                                <small class="text-muted ms-2">
+                                                    Tested: {{ key.last_tested|date:"Y-m-d H:i" }}
+                                                </small>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                    <div class="btn-group btn-group-sm">
+                                        <button class="btn btn-outline-primary" onclick="testKey({{ key.id }})">
+                                            <i class="fas fa-vial"></i> Test
+                                        </button>
+                                        <form method="post" action="{% url 'annotation:toggle_api_key' key.id %}" style="display: inline;">
+                                            {% csrf_token %}
+                                            <button type="submit" class="btn btn-outline-secondary">
+                                                {% if key.is_active %}
+                                                    <i class="fas fa-toggle-on"></i>
+                                                {% else %}
+                                                    <i class="fas fa-toggle-off"></i>
+                                                {% endif %}
+                                            </button>
+                                        </form>
+                                        <form method="post" action="{% url 'annotation:delete_api_key' key.id %}"
+                                              onsubmit="return confirm('Delete this API key?');" style="display: inline;">
+                                            {% csrf_token %}
+                                            <button type="submit" class="btn btn-outline-danger">
+                                                <i class="fas fa-trash"></i>
+                                            </button>
+                                        </form>
+                                    </div>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        {% else %}
+                            <p class="text-muted">No keys configured in database.</p>
+                        {% endif %}
+                    </div>
+
+                    <!-- Add Key Button -->
+                    <div class="mt-3">
+                        <a href="{% url 'annotation:add_api_key' provider.id %}" class="btn btn-success btn-sm">
+                            <i class="fas fa-plus"></i> Add New API Key
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+<script>
+function testKey(keyId) {
+    const btn = event.target.closest('button');
+    const originalHtml = btn.innerHTML;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Testing...';
+    btn.disabled = true;
+
+    fetch(`/annotation/api-keys/${keyId}/test/`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': '{{ csrf_token }}',
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        btn.innerHTML = originalHtml;
+        btn.disabled = false;
+
+        if (data.success) {
+            alert(`Test successful!\n\n${data.message}`);
+            location.reload();
+        } else {
+            alert(`Test failed!\n\n${data.message}`);
+        }
+    })
+    .catch(error => {
+        btn.innerHTML = originalHtml;
+        btn.disabled = false;
+        alert('Error testing key: ' + error);
+    });
+}
+
+function testAllKeys() {
+    if (!confirm('Test all active API keys? This may take a moment.')) {
+        return;
+    }
+
+    const btn = event.target.closest('button');
+    const originalHtml = btn.innerHTML;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Testing...';
+    btn.disabled = true;
+
+    fetch('/annotation/api-keys/test-all/', {
+        method: 'GET',
+    })
+    .then(response => response.json())
+    .then(data => {
+        btn.innerHTML = originalHtml;
+        btn.disabled = false;
+
+        let message = `Test Results:\n\n`;
+        message += `Total: ${data.total}\n`;
+        message += `Successful: ${data.successful}\n`;
+        message += `Failed: ${data.total - data.successful}\n\n`;
+
+        data.results.forEach(result => {
+            message += `${result.provider} - ${result.key_name}: ${result.success ? '✓' : '✗'}\n`;
+        });
+
+        alert(message);
+        location.reload();
+    })
+    .catch(error => {
+        btn.innerHTML = originalHtml;
+        btn.disabled = false;
+        alert('Error testing keys: ' + error);
+    });
+}
+
+function toggleProvider(providerId, isActive) {
+    // Future: Add AJAX call to toggle provider status
+    console.log(`Toggle provider ${providerId} to ${isActive}`);
+}
+</script>
+{% endblock %}
